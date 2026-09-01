@@ -1,5 +1,4 @@
 # modelo/solucionador.py
-import math
 from modelo.matriz import copiar_matriz
 
 class SolucionadorGauss:
