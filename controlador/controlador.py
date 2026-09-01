@@ -52,17 +52,18 @@ class Controlador:
             m = len(self.vista.matriz_entries)
             n = len(self.vista.matriz_entries[0])
             
+            from fractions import Fraction
             A = []
             for i in range(m):
                 fila = []
                 for j in range(n):
-                    val = float(self.vista.matriz_entries[i][j].get())
+                    val = float(Fraction(self.vista.matriz_entries[i][j].get()))
                     fila.append(val)
                 A.append(fila)
                 
             b = []
             for i in range(m):
-                val = float(self.vista.vector_entries[i].get())
+                val = float(Fraction(self.vista.vector_entries[i].get()))
                 b.append(val)
                 
         except ValueError:
