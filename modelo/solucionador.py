@@ -117,3 +117,72 @@ class SolucionadorGauss:
             error = abs(valor_calculado - self.b_original[i])
             errores.append((valor_calculado, self.b_original[i], error))
         return errores
+
+
+class SolucionadorGaussJordan(SolucionadorGauss):
+    def resolver(self):
+        self.guardar_paso("Matriz Aumentada Inicial:")
+
+        fila_pivote = 0
+        pivotes = []
+        for col in range(self.n):
+            if fila_pivote >= self.m:
+                break
+
+            max_idx = max(
+                range(fila_pivote, self.m),
+                key=lambda indice: abs(self.aumentada[indice][col])
+            )
+            max_val = abs(self.aumentada[max_idx][col])
+            if max_val < 1e-10:
+                continue
+
+            if max_idx != fila_pivote:
+                self.aumentada[fila_pivote], self.aumentada[max_idx] = (
+                    self.aumentada[max_idx], self.aumentada[fila_pivote]
+                )
+                self.guardar_paso(f"f_{fila_pivote+1} <-> f_{max_idx+1}")
+
+            pivote = self.aumentada[fila_pivote][col]
+            self.aumentada[fila_pivote] = [
+                valor / pivote for valor in self.aumentada[fila_pivote]
+            ]
+            self.guardar_paso(f"f_{fila_pivote+1} -> f_{fila_pivote+1} / {pivote:.3f}")
+
+            for indice in range(self.m):
+                if indice == fila_pivote:
+                    continue
+                factor = self.aumentada[indice][col]
+                if abs(factor) < 1e-10:
+                    continue
+                for j in range(self.n + 1):
+                    self.aumentada[indice][j] -= factor * self.aumentada[fila_pivote][j]
+                    if abs(self.aumentada[indice][j]) < 1e-10:
+                        self.aumentada[indice][j] = 0.0
+                signo = "+" if factor < 0 else "-"
+                self.guardar_paso(
+                    f"f_{indice+1} -> f_{indice+1} {signo} {abs(factor):.3f} * f_{fila_pivote+1}"
+                )
+
+            pivotes.append((fila_pivote, col))
+            fila_pivote += 1
+
+        rango_A = sum(
+            any(abs(valor) > 1e-10 for valor in fila[:-1])
+            for fila in self.aumentada
+        )
+        rango_Ab = sum(
+            any(abs(valor) > 1e-10 for valor in fila)
+            for fila in self.aumentada
+        )
+
+        if rango_A < rango_Ab:
+            self.clasificacion = "Sistema Inconsistente: Sin Solución"
+        elif rango_A == self.n:
+            self.clasificacion = "Sistema Consistente Determinado: Presenta Solución Única."
+            self.es_valido = True
+            self.solucion = [0.0] * self.n
+            for fila, col in pivotes:
+                self.solucion[col] = self.aumentada[fila][-1]
+        else:
+            self.clasificacion = "Sistema Consistente Indeterminado: Presenta Infinitas Soluciones"

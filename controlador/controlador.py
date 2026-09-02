@@ -1,5 +1,5 @@
 from vista.ventana_principal import VentanaPrincipal
-from modelo.solucionador import SolucionadorGauss
+from modelo.solucionador import SolucionadorGauss, SolucionadorGaussJordan
 from modelo.matriz import formatear_matriz
 
 class Controlador:
@@ -71,7 +71,10 @@ class Controlador:
             return
 
         # Instanciar modelo y ejecutar lógica
-        solucionador = SolucionadorGauss(A, b)
+        if self.vista.metodo.get() == "Gauss-Jordan":
+            solucionador = SolucionadorGaussJordan(A, b)
+        else:
+            solucionador = SolucionadorGauss(A, b)
         solucionador.resolver()
         
         # Extraer y formatear datos del modelo

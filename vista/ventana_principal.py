@@ -54,6 +54,17 @@ class VentanaPrincipal:
         
         self.btn_generar = ttk.Button(frame_config, text="Generar Cuadrícula", command=self.controlador.generar_cuadricula)
         self.btn_generar.grid(row=0, column=4, padx=20, pady=5)
+
+        ttk.Label(frame_config, text="Método:").grid(row=0, column=5, padx=(5, 2), pady=5)
+        self.metodo = tk.StringVar(value="Gauss")
+        self.selector_metodo = ttk.Combobox(
+            frame_config,
+            textvariable=self.metodo,
+            values=("Gauss", "Gauss-Jordan"),
+            state="readonly",
+            width=14
+        )
+        self.selector_metodo.grid(row=0, column=6, padx=5, pady=5)
         
         # Botones de ejemplos
         frame_ejemplos = ttk.Frame(frame_config)
