@@ -1,6 +1,6 @@
 from vista.ventana_principal import VentanaPrincipal
 from modelo.solucionador import SolucionadorGauss, SolucionadorGaussJordan
-from modelo.matriz import formatear_matriz
+from modelo.matriz import formatear_fraccion, formatear_matriz
 
 class Controlador:
     def __init__(self, root):
@@ -57,13 +57,13 @@ class Controlador:
             for i in range(m):
                 fila = []
                 for j in range(n):
-                    val = float(Fraction(self.vista.matriz_entries[i][j].get()))
+                    val = Fraction(self.vista.matriz_entries[i][j].get())
                     fila.append(val)
                 A.append(fila)
                 
             b = []
             for i in range(m):
-                val = float(Fraction(self.vista.vector_entries[i].get()))
+                val = Fraction(self.vista.vector_entries[i].get())
                 b.append(val)
                 
         except ValueError:
@@ -86,13 +86,13 @@ class Controlador:
         if solucionador.es_valido:
             texto_sol = "Vector de Solución:\n"
             for i, val in enumerate(solucionador.solucion):
-                texto_sol += f"x{i+1} = {val:.6f}\n"
+                texto_sol += f"x{i+1} = {formatear_fraccion(val)}\n"
                 
             errores = solucionador.verificar()
             if errores:
                 texto_ver = "Verificación (Ecuaciones originales):\n"
                 for i, (calc, orig, err) in enumerate(errores):
-                    texto_ver += f"Eq {i+1}: valor calculado = {calc:.6f}, valor original = {orig:.6f} | Error abs: {err:.2e}\n"
+                    texto_ver += f"Eq {i+1}: valor calculado = {formatear_fraccion(calc)}, valor original = {formatear_fraccion(orig)} | Error abs: {formatear_fraccion(err)}\n"
         else:
             texto_sol = "No hay una solución única."
             texto_ver = "Verificación no aplicable."

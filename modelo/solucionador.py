@@ -1,5 +1,6 @@
-# modelo/solucionador.py
-from modelo.matriz import copiar_matriz
+from fractions import Fraction
+
+from modelo.matriz import copiar_matriz, formatear_fraccion
 
 class SolucionadorGauss:
     def __init__(self, A, b):
@@ -7,8 +8,8 @@ class SolucionadorGauss:
         Inicializa el solucionador con la matriz de coeficientes A y el vector b.
         Se crean copias profundas para no alterar los datos originales.
         """
-        self.A_original = copiar_matriz(A)
-        self.b_original = list(b)
+        self.A_original = [[Fraction(valor) for valor in fila] for fila in A]
+        self.b_original = [Fraction(valor) for valor in b]
         self.m = len(A)       # Filas
         self.n = len(A[0])    # Columnas
         
@@ -65,11 +66,11 @@ class SolucionadorGauss:
                     self.aumentada[i][j] -= factor * self.aumentada[fila_pivote][j]
                     # Limpiar errores de punto flotante
                     if abs(self.aumentada[i][j]) < 1e-10:
-                        self.aumentada[i][j] = 0.0
+                        self.aumentada[i][j] = Fraction(0)
                 
                 if factor != 0:
                     signo = "+" if factor < 0 else "-"
-                    self.guardar_paso(f"f_{i+1} -> f_{i+1} {signo} {abs(factor):.3f} * f_{fila_pivote+1}")
+                    self.guardar_paso(f"f_{i+1} -> f_{i+1} {signo} {formatear_fraccion(abs(factor))} * f_{fila_pivote+1}")
                     
             fila_pivote += 1
 
@@ -99,7 +100,7 @@ class SolucionadorGauss:
             
     def sustitucion_hacia_atras(self):
         """Calcula el vector de soluciones partiendo de la última ecuación hacia arriba."""
-        self.solucion = [0.0] * self.n
+        self.solucion = [Fraction(0)] * self.n
         for i in range(self.n - 1, -1, -1):
             suma = sum(self.aumentada[i][j] * self.solucion[j] for j in range(i + 1, self.n))
             # El pivote en la fila i es self.aumentada[i][i]
@@ -147,7 +148,7 @@ class SolucionadorGaussJordan(SolucionadorGauss):
             self.aumentada[fila_pivote] = [
                 valor / pivote for valor in self.aumentada[fila_pivote]
             ]
-            self.guardar_paso(f"f_{fila_pivote+1} -> f_{fila_pivote+1} / {pivote:.3f}")
+            self.guardar_paso(f"f_{fila_pivote+1} -> f_{fila_pivote+1} / {formatear_fraccion(pivote)}")
 
             for indice in range(self.m):
                 if indice == fila_pivote:
@@ -158,10 +159,10 @@ class SolucionadorGaussJordan(SolucionadorGauss):
                 for j in range(self.n + 1):
                     self.aumentada[indice][j] -= factor * self.aumentada[fila_pivote][j]
                     if abs(self.aumentada[indice][j]) < 1e-10:
-                        self.aumentada[indice][j] = 0.0
+                        self.aumentada[indice][j] = Fraction(0)
                 signo = "+" if factor < 0 else "-"
                 self.guardar_paso(
-                    f"f_{indice+1} -> f_{indice+1} {signo} {abs(factor):.3f} * f_{fila_pivote+1}"
+                    f"f_{indice+1} -> f_{indice+1} {signo} {formatear_fraccion(abs(factor))} * f_{fila_pivote+1}"
                 )
 
             pivotes.append((fila_pivote, col))
@@ -181,7 +182,7 @@ class SolucionadorGaussJordan(SolucionadorGauss):
         elif rango_A == self.n:
             self.clasificacion = "Sistema Consistente Determinado: Presenta Solución Única."
             self.es_valido = True
-            self.solucion = [0.0] * self.n
+            self.solucion = [0] * self.n
             for fila, col in pivotes:
                 self.solucion[col] = self.aumentada[fila][-1]
         else:
