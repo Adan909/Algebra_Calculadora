@@ -1,10 +1,35 @@
 from vista.ventana_principal import VentanaPrincipal
 from modelo.solucionador import SolucionadorGauss, SolucionadorGaussJordan
-from modelo.matriz import formatear_fraccion, formatear_matriz
+from modelo.matriz import (
+    convertir_desde_base,
+    formatear_fraccion,
+    formatear_matriz,
+)
 
 class Controlador:
     def __init__(self, root):
         self.vista = VentanaPrincipal(root, self)
+
+    def convertir_numero(self):
+        try:
+            bases = {
+                "Decimal": 10,
+                "Binario": 2,
+                "Octal": 8,
+                "Hexadecimal": 16,
+            }
+            base_nombre = self.vista.base_entrada.get()
+            decimal, conversiones = convertir_desde_base(
+                self.vista.entrada_conversion.get(), bases[base_nombre]
+            )
+        except ValueError:
+            self.vista.mostrar_error("Error de valor", "Ingrese un valor válido para la base seleccionada.")
+            return
+
+        self.vista.actualizar_conversiones(
+            f"Entrada ({base_nombre}): {self.vista.entrada_conversion.get()}\n"
+            f"Valor decimal equivalente: {decimal}\n\n{conversiones}"
+        )
         
     def generar_cuadricula(self):
         try:

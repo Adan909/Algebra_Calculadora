@@ -75,6 +75,26 @@ class VentanaPrincipal:
         ttk.Button(frame_ejemplos, text="Infinitas Soluciones", command=lambda: self.controlador.cargar_ejemplo("infinitas")).pack(side=tk.LEFT, padx=5)
         ttk.Button(frame_ejemplos, text="Sin Solución", command=lambda: self.controlador.cargar_ejemplo("inconsistente")).pack(side=tk.LEFT, padx=5)
 
+        frame_conversion = ttk.Frame(frame_config)
+        frame_conversion.grid(row=2, column=0, columnspan=7, pady=(5, 0))
+        ttk.Label(frame_conversion, text="Base de entrada:").pack(side=tk.LEFT, padx=5)
+        self.base_entrada = tk.StringVar(value="Decimal")
+        self.selector_base = ttk.Combobox(
+            frame_conversion,
+            textvariable=self.base_entrada,
+            values=("Decimal", "Binario", "Octal", "Hexadecimal"),
+            state="readonly",
+            width=12
+        )
+        self.selector_base.pack(side=tk.LEFT, padx=5)
+        self.entrada_conversion = ttk.Entry(frame_conversion, width=14, justify="center")
+        self.entrada_conversion.pack(side=tk.LEFT, padx=5)
+        ttk.Button(
+            frame_conversion,
+            text="Convertir",
+            command=self.controlador.convertir_numero
+        ).pack(side=tk.LEFT, padx=5)
+
     def _crear_panel_matriz(self):
         self.frame_matriz_outer = ttk.LabelFrame(self.main_container, text="Ingreso de Coeficientes", padding="10")
         self.frame_matriz_outer.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
@@ -92,6 +112,7 @@ class VentanaPrincipal:
     def _crear_panel_resultados(self):
         frame_resultados = ttk.Notebook(self.main_container)
         frame_resultados.pack(fill=tk.BOTH, expand=True)
+        self.frame_resultados = frame_resultados
         
         # Pestaña de Resumen y Clasificación
         self.tab_resumen = ttk.Frame(frame_resultados, padding="10")
@@ -108,6 +129,19 @@ class VentanaPrincipal:
         
         self.txt_verificacion = tk.Text(self.tab_resumen, height=8, state=tk.DISABLED, bg="#ffffff", font=("Consolas", 11), relief=tk.FLAT, borderwidth=1)
         self.txt_verificacion.pack(fill=tk.BOTH, expand=True, pady=5)
+
+        self.tab_conversiones = ttk.Frame(frame_resultados, padding="10")
+        frame_resultados.add(self.tab_conversiones, text="Conversiones")
+        self.txt_conversiones = tk.Text(
+            self.tab_conversiones,
+            height=8,
+            state=tk.DISABLED,
+            bg="#ffffff",
+            font=("Consolas", 11),
+            relief=tk.FLAT,
+            borderwidth=1
+        )
+        self.txt_conversiones.pack(fill=tk.BOTH, expand=True)
         
         # Pestaña del Historial Paso a Paso
         self.tab_historial = ttk.Frame(frame_resultados, padding="10")
@@ -170,6 +204,13 @@ class VentanaPrincipal:
         self.txt_verificacion.delete(1.0, tk.END)
         self.txt_verificacion.insert(tk.END, verificacion_texto)
         self.txt_verificacion.config(state=tk.DISABLED)
+
+    def actualizar_conversiones(self, conversiones_texto):
+        self.txt_conversiones.config(state=tk.NORMAL)
+        self.txt_conversiones.delete(1.0, tk.END)
+        self.txt_conversiones.insert(tk.END, conversiones_texto)
+        self.txt_conversiones.config(state=tk.DISABLED)
+        self.frame_resultados.select(self.tab_conversiones)
         
     def actualizar_historial(self, historial_texto):
         self.txt_historial.config(state=tk.NORMAL)
