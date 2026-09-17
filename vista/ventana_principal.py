@@ -94,6 +94,10 @@ class VentanaPrincipal:
             text="Convertir",
             command=self.controlador.convertir_numero
         ).pack(side=tk.LEFT, padx=5)
+        # Botón para abrir la ventana de Operaciones de Vectores y Matrices
+        frame_modulos_extra = ttk.Frame(frame_config)
+        frame_modulos_extra.grid(row=3, column=0, columnspan=7, pady=(10, 0))
+        ttk.Button(frame_modulos_extra, text="Abrir Módulo de Vectores y Matrices", command=self.controlador.abrir_operaciones).pack()
 
     def _crear_panel_matriz(self):
         self.frame_matriz_outer = ttk.LabelFrame(self.main_container, text="Ingreso de Coeficientes", padding="10")

@@ -187,3 +187,42 @@ class SolucionadorGaussJordan(SolucionadorGauss):
                 self.solucion[col] = self.aumentada[fila][-1]
         else:
             self.clasificacion = "Sistema Consistente Indeterminado: Presenta Infinitas Soluciones"
+
+
+def resolver_Ax_b(A, b):
+    """
+    Procedimiento algebraico: Resolución de sistema de ecuaciones lineales.
+    1. Se crea la matriz aumentada uniendo A (m x n) y el vector columna b (m x 1).
+    2. Se aplica Eliminación de Gauss-Jordan con pivoteo parcial para escalonar.
+    3. Se evalúa la consistencia del sistema y se extrae el vector solución x.
+    """
+    n = len(A)
+    if any(len(fila) != n for fila in A) or len(b) != n:
+        raise ValueError("El sistema requiere una matriz cuadrada A (n x n) y un vector b de tamaño n.")
+
+    # Crear matriz aumentada M = [A | b]
+    M = [A[i][:] + [b[i]] for i in range(n)]
+
+    for i in range(n):
+        # Pivoteo Parcial: Buscar el máximo valor absoluto en la columna actual
+        fila_max = max(range(i, n), key=lambda r: abs(M[r][i]))
+        M[i], M[fila_max] = M[fila_max], M[i]
+
+        if abs(M[i][i]) < 1e-9:
+            raise ValueError("El sistema es singular (no tiene solución única).")
+
+        # Normalizar fila dividiendo entre el pivote
+        pivote = M[i][i]
+        for j in range(i, n + 1):
+            M[i][j] /= pivote
+
+        # Eliminación hacia abajo y hacia arriba
+        for k in range(n):
+            if k != i:
+                factor = M[k][i]
+                for j in range(i, n + 1):
+                    M[k][j] -= factor * M[i][j]
+
+    # Extraer el vector solución x (última columna de la matriz M ya reducida)
+    x = [M[i][-1] for i in range(n)]
+    return x
