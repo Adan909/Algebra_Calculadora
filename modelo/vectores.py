@@ -111,30 +111,12 @@ def sumar_vectores_multiplicados(vectores, escalares):
 def es_combinacion_lineal(vectores, b):
     """
     Determina si el vector b es combinación lineal de un conjunto
-    de vectores.
-
-    Procedimiento algebraico equivalente:
-
-    Se busca determinar si existen escalares
-    c1, c2, ..., ck tales que:
-
-    c1*v1 + c2*v2 + ... + ck*vk = b
-
-    Para ello se construye el sistema:
-
-    A*c = b
-
-    donde las columnas de A son los vectores v1, v2, ..., vk.
-
-    Se utiliza eliminación de Gauss para determinar si el sistema
-    es compatible.
+    de vectores, reutilizando el solucionador de Gauss.
     """
-
     if len(vectores) == 0:
         return False, []
 
     dimension = len(b)
-
     for vector in vectores:
         if len(vector) != dimension:
             raise ValueError(
@@ -142,127 +124,49 @@ def es_combinacion_lineal(vectores, b):
             )
 
     cantidad_vectores = len(vectores)
-
-    # Construir la matriz aumentada [A | b].
-    #
-    # Cada columna corresponde a uno de los vectores.
-    # La última columna corresponde al vector b.
-    matriz = []
-
+    
+    # Construir la matriz A (donde cada columna es un vector del conjunto)
+    A = []
     for i in range(dimension):
         fila = []
-
         for j in range(cantidad_vectores):
             fila.append(Fraction(vectores[j][i]))
+        A.append(fila)
 
-        fila.append(Fraction(b[i]))
+    # Convertir b a fracciones
+    b_frac = [Fraction(val) for val in b]
 
-        matriz.append(fila)
+    # Reutilizar el solucionador existente
+    from modelo.solucionador import SolucionadorGaussJordan
+    solucionador = SolucionadorGaussJordan(A, b_frac)
+    solucionador.resolver()
 
-    solucion, compatible = _resolver_sistema(matriz)
-
-    return compatible, solucion
-
-
-def _resolver_sistema(matriz):
-    """
-    Resuelve un sistema lineal utilizando eliminación de Gauss.
-
-    Procedimiento algebraico equivalente:
-    Se transforma la matriz aumentada [A|b] mediante operaciones
-    elementales sobre las filas hasta obtener una forma escalonada.
-
-    Las operaciones permitidas son:
-
-    1. Intercambiar dos filas.
-    2. Multiplicar una fila por un número distinto de cero.
-    3. Sumar a una fila un múltiplo de otra.
-
-    Si aparece una fila:
-
-    [0  0  ...  0 | c]
-
-    con c diferente de cero, el sistema es incompatible.
-    """
-    matriz = [
-        [Fraction(valor) for valor in fila]
-        for fila in matriz
-    ]
-
-    filas = len(matriz)
-    columnas = len(matriz[0])
-
-    variables = columnas - 1
-
-    fila_pivote = 0
+    # Si es inconsistente, no es combinación lineal
+    if "Inconsistente" in solucionador.clasificacion:
+        return False, []
+        
+    # Si tiene solución (única o infinitas) es combinación lineal.
+    # En caso de infinitas soluciones, tomamos una solución particular 
+    # asumiendo las variables libres como 0. 
+    # El SolucionadorGaussJordan no maneja directamente la extracción 
+    # completa de la solución paramétrica para uso externo, pero podemos 
+    # extraer los coeficientes de la última columna de la matriz reducida.
+    
+    escalares = [Fraction(0)] * cantidad_vectores
+    
+    # Extraer los pivotes encontrados en la matriz aumentada reducida
     pivotes = []
-
-    for columna in range(variables):
-
-        # Buscar una fila que tenga un valor diferente de cero
-        # en la columna actual.
-        fila_encontrada = None
-
-        for i in range(fila_pivote, filas):
-            if matriz[i][columna] != 0:
-                fila_encontrada = i
+    filas = len(solucionador.aumentada)
+    cols = len(solucionador.aumentada[0]) - 1 # Sin contar b
+    
+    # Buscar variables principales
+    for r in range(filas):
+        for c in range(cols):
+            if abs(solucionador.aumentada[r][c]) > 1e-10:
+                pivotes.append((r, c))
                 break
+                
+    for fila, col in pivotes:
+        escalares[col] = solucionador.aumentada[fila][-1]
 
-        # Si toda la columna es cero, no existe pivote.
-        if fila_encontrada is None:
-            continue
-
-        # Intercambiar filas si es necesario.
-        if fila_encontrada != fila_pivote:
-            matriz[fila_pivote], matriz[fila_encontrada] = (
-                matriz[fila_encontrada],
-                matriz[fila_pivote]
-            )
-
-        # Convertir el pivote en 1.
-        pivote = matriz[fila_pivote][columna]
-
-        for j in range(columnas):
-            matriz[fila_pivote][j] /= pivote
-
-        # Hacer cero debajo del pivote.
-        for i in range(fila_pivote + 1, filas):
-            factor = matriz[i][columna]
-
-            if factor != 0:
-                for j in range(columnas):
-                    matriz[i][j] -= factor * matriz[fila_pivote][j]
-
-        pivotes.append(columna)
-        fila_pivote += 1
-
-        if fila_pivote == filas:
-            break
-
-    # Comprobar incompatibilidad.
-    for i in range(filas):
-        todos_cero = True
-
-        for j in range(variables):
-            if matriz[i][j] != 0:
-                todos_cero = False
-                break
-
-        if todos_cero and matriz[i][variables] != 0:
-            return [], False
-
-    # Si hay variables libres, tomamos esas variables como 0.
-    solucion = [Fraction(0) for _ in range(variables)]
-
-    # Sustitución hacia atrás.
-    for i in range(len(pivotes) - 1, -1, -1):
-        columna = pivotes[i]
-
-        valor = matriz[i][variables]
-
-        for j in range(columna + 1, variables):
-            valor -= matriz[i][j] * solucion[j]
-
-        solucion[columna] = valor / matriz[i][columna]
-
-    return solucion, True
+    return True, escalares
