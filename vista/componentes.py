@@ -4,17 +4,16 @@ from tkinter import ttk
 class ScrollableFrame(ttk.Frame):
     """
     Un componente de Frame que incluye barras de desplazamiento.
-    Útil para mostrar el historial paso a paso que puede ser largo,
-    y también para la matriz dinámica de entradas si supera el tamaño de la ventana.
+    Adaptado con la estética técnica oscura negro y azul.
     """
-    def __init__(self, container, *args, **kwargs):
+    def __init__(self, container, bg_color="#070e1c", *args, **kwargs):
         super().__init__(container, *args, **kwargs)
         
-        self.canvas = tk.Canvas(self, borderwidth=0, highlightthickness=0)
+        self.canvas = tk.Canvas(self, borderwidth=0, highlightthickness=0, bg=bg_color)
         self.scrollbar_y = ttk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
         self.scrollbar_x = ttk.Scrollbar(self, orient="horizontal", command=self.canvas.xview)
         
-        self.scrollable_frame = ttk.Frame(self.canvas)
+        self.scrollable_frame = tk.Frame(self.canvas, bg=bg_color)
         
         self.scrollable_frame.bind(
             "<Configure>",

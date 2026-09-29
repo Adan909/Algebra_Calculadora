@@ -16,6 +16,12 @@ from modelo.operaciones_matrices import (
     multiplicar_matrices
 )
 from modelo.conversiones import decimal_a_base, base_a_decimal
+from modelo.romanos import (
+    operar_lista_romanos,
+    evaluar_expresion_romana,
+    romano_a_arabigo,
+    arabigo_a_romano
+)
 
 class Controlador:
     def __init__(self, root):
@@ -281,4 +287,69 @@ class Controlador:
             self.vista.mostrar_resultado_conversion(texto)
         except Exception as e:
             self.vista.mostrar_error("Error", str(e))
+
+    # ==========================================================
+    # NÚMEROS ROMANOS
+    # ==========================================================
+    def generar_campos_romanos(self):
+        try:
+            cant = int(self.vista.spin_cant_romanos.get())
+            if not 2 <= cant <= 10:
+                self.vista.mostrar_error("Error", "La cantidad de números romanos debe estar entre 2 y 10.")
+                return
+            self.vista.construir_campos_romanos(cant)
+        except ValueError:
+            self.vista.mostrar_error("Error", "Ingrese una cantidad válida de operandos.")
+
+    def cargar_ejemplo_romanos(self, tipo):
+        datos = {
+            "suma3": (3, "Suma (+)", ["XVI", "IV", "II"]),
+            "mult": (2, "Multiplicación (×)", ["XII", "IV"]),
+            "div": (2, "División (÷)", ["XXV", "IV"]),
+            "resta3": (3, "Resta (-)", ["L", "XV", "V"])
+        }
+        if tipo in datos:
+            cant, op, valores = datos[tipo]
+            self.vista.spin_cant_romanos.set(cant)
+            self.vista.op_romanos.set(op)
+            self.vista.construir_campos_romanos(cant)
+            for i, val in enumerate(valores):
+                self.vista.romanos_entries[i].delete(0, 'end')
+                self.vista.romanos_entries[i].insert(0, val)
+            self.calcular_operacion_romanos()
+
+    def calcular_operacion_romanos(self):
+        mapa_ops = {
+            "Suma (+)": "+",
+            "Resta (-)": "-",
+            "Multiplicación (×)": "*",
+            "División (÷)": "/"
+        }
+        op_texto = self.vista.op_romanos.get()
+        operacion = mapa_ops.get(op_texto, "+")
+
+        lista_valores = [entry.get().strip() for entry in self.vista.romanos_entries]
+        
+        if any(not v for v in lista_valores):
+            self.vista.mostrar_error("Error de Entrada", "Todos los campos de números romanos deben contener un valor.")
+            return
+
+        resultado = operar_lista_romanos(lista_valores, operacion)
+        if resultado['exito']:
+            self.vista.mostrar_resultados_romanos(resultado)
+        else:
+            self.vista.mostrar_error("Error en Operación", resultado['error'])
+
+    def evaluar_expresion_romana(self):
+        exp = self.vista.entry_expresion_romana.get().strip()
+        if not exp:
+            self.vista.mostrar_error("Error", "Por favor ingrese una expresión romana.")
+            return
+            
+        resultado = evaluar_expresion_romana(exp)
+        if resultado['exito']:
+            self.vista.mostrar_resultados_romanos(resultado)
+        else:
+            self.vista.mostrar_error("Error en Expresión", resultado['error'])
+
 
