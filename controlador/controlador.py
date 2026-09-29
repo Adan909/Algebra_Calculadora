@@ -13,7 +13,9 @@ from modelo.operaciones_matrices import (
     sumar_matrices,
     restar_matrices,
     multiplicar_matriz_escalar,
-    multiplicar_matrices
+    multiplicar_matrices,
+    invertir_matriz,
+    invertir_matriz_con_pasos
 )
 from modelo.conversiones import decimal_a_base, base_a_decimal
 from modelo.romanos import (
@@ -45,6 +47,12 @@ class Controlador:
             self.vista.mostrar_error("Error de entrada", "Por favor, ingrese valores enteros válidos para m y n.")
             
     def cargar_ejemplo(self, tipo):
+        if tipo == "inversa":
+            self.vista.nb_main.select(self.vista.tab_vectorial)
+            self.vista.nb_vectorial.select(1)
+            self.cargar_ejemplo_matrices("inv_2x2")
+            return
+
         if tipo == "unica":
             A = [[2, 1, -1], [-3, -1, 2], [-2, 1, 2]]
             b = [8, -11, -3]
@@ -67,6 +75,44 @@ class Controlador:
                 self.vista.matriz_entries[i][j].insert(0, str(A[i][j]))
             self.vista.vector_entries[i].delete(0, 'end')
             self.vista.vector_entries[i].insert(0, str(b[i]))
+
+    def cargar_ejemplo_matrices(self, tipo):
+        if tipo == "inv_2x2":
+            A = [[4, 7], [2, 6]]
+            B = [[1, 0], [0, 1]]
+        elif tipo == "inv_3x3":
+            A = [[1, 2, 3], [0, 1, 4], [5, 6, 0]]
+            B = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+        elif tipo == "inv_singular":
+            A = [[1, 2], [2, 4]]
+            B = [[1, 0], [0, 1]]
+        else:
+            return
+
+        filas_a = len(A)
+        columnas_a = len(A[0])
+        filas_b = len(B)
+        columnas_b = len(B[0])
+
+        self.vista.spin_fa.set(filas_a)
+        self.vista.spin_ca.set(columnas_a)
+        self.vista.spin_fb.set(filas_b)
+        self.vista.spin_cb.set(columnas_b)
+
+        self.vista.construir_matrices_ops(filas_a, columnas_a, filas_b, columnas_b)
+
+        for i in range(filas_a):
+            for j in range(columnas_a):
+                self.vista.mat_entries_a[i][j].delete(0, 'end')
+                self.vista.mat_entries_a[i][j].insert(0, str(A[i][j]))
+
+        for i in range(filas_b):
+            for j in range(columnas_b):
+                self.vista.mat_entries_b[i][j].delete(0, 'end')
+                self.vista.mat_entries_b[i][j].insert(0, str(B[i][j]))
+
+        # Calcular automáticamente la inversa de A
+        self.operar_matrices("inversa_a")
 
     def resolver_sistema(self):
         try:
@@ -229,22 +275,62 @@ class Controlador:
             if operacion == "suma":
                 resultado = sumar_matrices(A, B)
                 titulo = "A + B"
+                texto = f"RESULTADO: {titulo}\n\n"
+                texto += self.formatear_matriz_resultado(resultado)
             elif operacion == "resta":
                 resultado = restar_matrices(A, B)
-                titulo = "A - B"
+                titulo = "A − B"
+                texto = f"RESULTADO: {titulo}\n\n"
+                texto += self.formatear_matriz_resultado(resultado)
             elif operacion == "multiplicacion":
                 resultado = multiplicar_matrices(A, B)
                 titulo = "A × B"
+                texto = f"RESULTADO: {titulo}\n\n"
+                texto += self.formatear_matriz_resultado(resultado)
             elif operacion == "escalar":
                 from fractions import Fraction
                 escalar = Fraction(self.vista.entrada_escalar_mat.get())
                 resultado = multiplicar_matriz_escalar(A, escalar)
                 titulo = f"{formatear_fraccion(escalar)}A"
+                texto = f"RESULTADO: {titulo}\n\n"
+                texto += self.formatear_matriz_resultado(resultado)
+            elif operacion == "inversa_a":
+                inversa, pasos = invertir_matriz_con_pasos(A)
+                titulo = "INVERSA DE LA MATRIZ A (A⁻¹)"
+                texto = f"==========================================================\n"
+                texto += f"RESULTADO: {titulo}\n"
+                texto += f"==========================================================\n\n"
+                texto += "MATRIZ INVERSA A⁻¹:\n"
+                texto += self.formatear_matriz_resultado(inversa) + "\n"
+
+                comprobacion = multiplicar_matrices(A, inversa)
+                texto += "COMPROBACIÓN DE IDENTIDAD ( A × A⁻¹ = I ):\n"
+                texto += self.formatear_matriz_resultado(comprobacion) + "\n"
+
+                texto += "----------------------------------------------------------\n"
+                texto += "DESGLOSE DE OPERACIONES ELEMENTALES POR FILA (GAUSS-JORDAN):\n"
+                texto += "----------------------------------------------------------\n"
+                texto += "\n".join(pasos) + "\n"
+            elif operacion == "inversa_b":
+                inversa, pasos = invertir_matriz_con_pasos(B)
+                titulo = "INVERSA DE LA MATRIZ B (B⁻¹)"
+                texto = f"==========================================================\n"
+                texto += f"RESULTADO: {titulo}\n"
+                texto += f"==========================================================\n\n"
+                texto += "MATRIZ INVERSA B⁻¹:\n"
+                texto += self.formatear_matriz_resultado(inversa) + "\n"
+
+                comprobacion = multiplicar_matrices(B, inversa)
+                texto += "COMPROBACIÓN DE IDENTIDAD ( B × B⁻¹ = I ):\n"
+                texto += self.formatear_matriz_resultado(comprobacion) + "\n"
+
+                texto += "----------------------------------------------------------\n"
+                texto += "DESGLOSE DE OPERACIONES ELEMENTALES POR FILA (GAUSS-JORDAN):\n"
+                texto += "----------------------------------------------------------\n"
+                texto += "\n".join(pasos) + "\n"
             else:
                 return
 
-            texto = f"RESULTADO: {titulo}\n\n"
-            texto += self.formatear_matriz_resultado(resultado)
             self.vista.mostrar_resultado_matrices(texto)
 
         except ValueError as error:

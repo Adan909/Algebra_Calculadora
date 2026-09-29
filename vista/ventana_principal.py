@@ -61,6 +61,8 @@ class VentanaPrincipal:
 
         self.controlador = controlador
         self._op_count = 0
+        self._root_fullscreen = False
+        self.root.bind("<F11>", self._toggle_root_fullscreen)
 
         self._estilos()
         self._header()
@@ -260,7 +262,276 @@ class VentanaPrincipal:
         inner = tk.Frame(wrap, bg=C_SECTION, padx=12, pady=10)
         inner.pack(fill=tk.BOTH, expand=True)
 
+        wrap.bar = bar
         return wrap, inner
+
+    def _conectar_consola_fullscreen(self, widget_text, titulo, bar=None, proveedor_texto=None):
+        """
+        Conecta un widget de consola a la funcionalidad universal de pantalla completa:
+        - Agrega botón '⛶ PANTALLA COMPLETA' en la barra de cabecera si se proporciona.
+        - Asocia doble clic en la consola para abrir en pantalla completa.
+        - Agrega menú contextual de clic derecho (Abrir en pantalla completa, Copiar todo).
+        """
+        target = proveedor_texto if proveedor_texto is not None else widget_text
+
+        if bar is not None:
+            btn_fs = tk.Button(
+                bar, text=" ⛶ PANTALLA COMPLETA ", font=F_SMALL,
+                bg="#061a36", fg=C_NEON, activebackground=C_ACCENT,
+                activeforeground=C_WHITE, bd=0, relief="flat",
+                cursor="hand2", padx=8, pady=1,
+                command=lambda: self.abrir_consola_fullscreen(titulo, target)
+            )
+            btn_fs.pack(side=tk.RIGHT, padx=6, pady=2)
+
+        # Doble clic sobre el texto de la consola
+        widget_text.bind(
+            "<Double-Button-1>",
+            lambda e: self.abrir_consola_fullscreen(titulo, target)
+        )
+
+        # Menú contextual con clic derecho
+        menu = tk.Menu(widget_text, tearoff=0, bg=C_HEADER, fg=C_WHITE,
+                       activebackground=C_ACCENT, activeforeground=C_WHITE,
+                       font=F_LABEL, bd=1, relief="solid")
+        menu.add_command(
+            label="  ⛶  Abrir en Pantalla Completa",
+            command=lambda: self.abrir_consola_fullscreen(titulo, target)
+        )
+        menu.add_separator()
+        def copiar():
+            texto = widget_text.get("1.0", tk.END).strip()
+            if texto:
+                self.root.clipboard_clear()
+                self.root.clipboard_append(texto)
+        menu.add_command(label="  📋  Copiar Todo", command=copiar)
+
+        def popup(event):
+            try:
+                menu.tk_popup(event.x_root, event.y_root)
+            finally:
+                menu.grab_release()
+
+        widget_text.bind("<Button-3>", popup)
+
+    def abrir_consola_fullscreen(self, titulo, widget_origen):
+        """
+        Abre una ventana emergente en pantalla completa técnica industrial.
+        Permite zoom con teclado o ratón, copiar al portapapeles, refrescar,
+        alternar pantalla completa pura con F11 o botón, y cerrar con ESC.
+        """
+        ventana_fs = tk.Toplevel(self.root)
+        ventana_fs.title(f"CONSOLA EN PANTALLA COMPLETA · {titulo.upper()}")
+        ventana_fs.configure(bg=C_ROOT)
+
+        es_fullscreen = [True]
+        try:
+            ventana_fs.attributes("-fullscreen", True)
+        except Exception:
+            pass
+
+        tamano_fuente = [12]
+
+        def actualizar_fuente():
+            txt_fs.config(font=("JetBrains Mono", tamano_fuente[0]))
+
+        def zoom_in(event=None):
+            if tamano_fuente[0] < 28:
+                tamano_fuente[0] += 1
+                actualizar_fuente()
+
+        def zoom_out(event=None):
+            if tamano_fuente[0] > 8:
+                tamano_fuente[0] -= 1
+                actualizar_fuente()
+
+        def toggle_fullscreen(event=None):
+            es_fullscreen[0] = not es_fullscreen[0]
+            try:
+                ventana_fs.attributes("-fullscreen", es_fullscreen[0])
+            except Exception:
+                pass
+            btn_toggle_fs.config(
+                text=" 🗗 RESTAURAR (F11) " if es_fullscreen[0] else " ⛶ PANTALLA COMPLETA (F11) "
+            )
+
+        def copiar_todo(event=None):
+            contenido = txt_fs.get("1.0", tk.END).strip()
+            if contenido:
+                self.root.clipboard_clear()
+                self.root.clipboard_append(contenido)
+                lbl_copiado.config(text="✔ COPIADO AL PORTAPAPELES", fg=C_OK)
+                ventana_fs.after(2500, lambda: lbl_copiado.config(text=""))
+
+        def recargar_contenido(event=None):
+            txt_fs.config(state=tk.NORMAL)
+            txt_fs.delete("1.0", tk.END)
+            if hasattr(widget_origen, "get"):
+                texto = widget_origen.get("1.0", tk.END).strip()
+            elif callable(widget_origen):
+                texto = str(widget_origen()).strip()
+            else:
+                texto = str(widget_origen).strip()
+            if not texto:
+                texto = "[ CONSOLA VACÍA — NO SE HA GENERADO NINGÚN RESULTADO AÚN ]"
+            txt_fs.insert(tk.END, texto)
+            txt_fs.config(state=tk.NORMAL)
+
+        # ── Barra superior técnica ───────────────────────────────────────────
+        top_bar = tk.Frame(ventana_fs, bg=C_HEADER, height=44)
+        top_bar.pack(fill=tk.X, side=tk.TOP)
+        top_bar.pack_propagate(False)
+
+        tk.Frame(ventana_fs, bg=C_NEON, height=2).pack(fill=tk.X, side=tk.TOP)
+
+        # Lado izquierdo: indicador y título
+        left_box = tk.Frame(top_bar, bg=C_HEADER)
+        left_box.pack(side=tk.LEFT, fill=tk.Y, padx=14)
+
+        tk.Label(
+            left_box, text="● MODO PANTALLA COMPLETA  ┃ ",
+            font=("JetBrains Mono", 10, "bold"), bg=C_HEADER, fg=C_OK
+        ).pack(side=tk.LEFT)
+
+        tk.Label(
+            left_box, text=titulo.upper(),
+            font=("JetBrains Mono", 11, "bold"), bg=C_HEADER, fg=C_WHITE
+        ).pack(side=tk.LEFT)
+
+        lbl_copiado = tk.Label(
+            left_box, text="", font=F_SMALL, bg=C_HEADER, fg=C_OK
+        )
+        lbl_copiado.pack(side=tk.LEFT, padx=12)
+
+        # Lado derecho: Botones de control
+        right_box = tk.Frame(top_bar, bg=C_HEADER)
+        right_box.pack(side=tk.RIGHT, fill=tk.Y, padx=10)
+
+        # Botones de Zoom
+        tk.Button(
+            right_box, text=" A − ", font=F_MONO_B,
+            bg="#061833", fg=C_SILVER, activebackground=C_ACCENT, activeforeground=C_WHITE,
+            bd=0, relief="flat", cursor="hand2", padx=6, pady=4, command=zoom_out
+        ).pack(side=tk.LEFT, padx=2, pady=6)
+
+        tk.Button(
+            right_box, text=" A + ", font=F_MONO_B,
+            bg="#061833", fg=C_SILVER, activebackground=C_ACCENT, activeforeground=C_WHITE,
+            bd=0, relief="flat", cursor="hand2", padx=6, pady=4, command=zoom_in
+        ).pack(side=tk.LEFT, padx=2, pady=6)
+
+        # Botón Copiar
+        tk.Button(
+            right_box, text=" 📋 COPIAR TODO ", font=F_MONO_B,
+            bg="#062244", fg=C_NEON, activebackground=C_BRIGHT, activeforeground=C_WHITE,
+            bd=0, relief="flat", cursor="hand2", padx=10, pady=4, command=copiar_todo
+        ).pack(side=tk.LEFT, padx=4, pady=6)
+
+        # Botón Recargar
+        tk.Button(
+            right_box, text=" ⟳ REFRESCAR ", font=F_MONO_B,
+            bg="#061833", fg=C_SILVER, activebackground=C_ACCENT, activeforeground=C_WHITE,
+            bd=0, relief="flat", cursor="hand2", padx=8, pady=4, command=recargar_contenido
+        ).pack(side=tk.LEFT, padx=4, pady=6)
+
+        # Botón Toggle Fullscreen
+        btn_toggle_fs = tk.Button(
+            right_box, text=" 🗗 RESTAURAR (F11) ", font=F_MONO_B,
+            bg="#061833", fg=C_SILVER, activebackground=C_ACCENT, activeforeground=C_WHITE,
+            bd=0, relief="flat", cursor="hand2", padx=8, pady=4, command=toggle_fullscreen
+        )
+        btn_toggle_fs.pack(side=tk.LEFT, padx=4, pady=6)
+
+        # Botón Cerrar
+        tk.Button(
+            right_box, text=" ✕ CERRAR (ESC) ", font=F_MONO_B,
+            bg="#380505", fg="#ff8888", activebackground="#aa1111", activeforeground=C_WHITE,
+            bd=0, relief="flat", cursor="hand2", padx=12, pady=4, command=ventana_fs.destroy
+        ).pack(side=tk.LEFT, padx=(6, 2), pady=6)
+
+        # ── Cuerpo: Área de texto con scrollbars ──────────────────────────────
+        body_frame = tk.Frame(ventana_fs, bg=C_ROOT, padx=12, pady=10)
+        body_frame.pack(fill=tk.BOTH, expand=True)
+
+        txt_fs = tk.Text(
+            body_frame, font=("JetBrains Mono", tamano_fuente[0]),
+            bg=C_INPUT, fg=C_WHITE, insertbackground=C_NEON,
+            selectbackground=C_ACCENT, selectforeground=C_WHITE,
+            relief="flat", bd=0, wrap=tk.NONE,
+            highlightthickness=1, highlightbackground=C_BORDER,
+            highlightcolor=C_GLOW
+        )
+        sc_y = ttk.Scrollbar(body_frame, orient="vertical", command=txt_fs.yview)
+        sc_x = ttk.Scrollbar(body_frame, orient="horizontal", command=txt_fs.xview)
+        txt_fs.configure(yscrollcommand=sc_y.set, xscrollcommand=sc_x.set)
+
+        txt_fs.grid(row=0, column=0, sticky="nsew")
+        sc_y.grid(row=0, column=1, sticky="ns")
+        sc_x.grid(row=1, column=0, sticky="ew")
+
+        body_frame.grid_rowconfigure(0, weight=1)
+        body_frame.grid_columnconfigure(0, weight=1)
+
+        # ── Footer informativo ────────────────────────────────────────────────
+        footer = tk.Frame(ventana_fs, bg="#020b18", height=24)
+        footer.pack(fill=tk.X, side=tk.BOTTOM)
+        footer.pack_propagate(False)
+
+        tk.Label(
+            footer,
+            text="  [ESC] Cerrar  ·  [F11] Pantalla Completa  ·  [Ctrl + C] Copiar  ·  [Ctrl + Rueda / A+, A-] Zoom",
+            font=F_SMALL, bg="#020b18", fg=C_MUTED
+        ).pack(side=tk.LEFT, padx=10, pady=3)
+
+        recargar_contenido()
+
+        ventana_fs.bind("<Escape>", lambda e: ventana_fs.destroy())
+        ventana_fs.bind("<F11>", toggle_fullscreen)
+        ventana_fs.bind("<Control-plus>", zoom_in)
+        ventana_fs.bind("<Control-minus>", zoom_out)
+        ventana_fs.bind("<Control-equal>", zoom_in)
+        ventana_fs.bind("<Control-Button-4>", lambda e: zoom_in())
+        ventana_fs.bind("<Control-Button-5>", lambda e: zoom_out())
+        ventana_fs.focus_set()
+
+    def _obtener_resumen_gauss_texto(self):
+        clasif = self.lbl_clasificacion.cget("text")
+        sol = self.txt_solucion.get("1.0", tk.END).strip()
+        ver = self.txt_verificacion.get("1.0", tk.END).strip()
+        hist = self.txt_historial.get("1.0", tk.END).strip()
+
+        lineas = []
+        lineas.append("================================================================================")
+        lineas.append(f"  {clasif}")
+        lineas.append("================================================================================\n")
+        lineas.append("── VECTOR DE SOLUCIÓN ──────────────────────────────────────────────────────────")
+        lineas.append(sol if sol else "[ Sin solución calculada ]")
+        lineas.append("\n── COMPROBACIÓN EN ECUACIONES ORIGINALES ───────────────────────────────────────")
+        lineas.append(ver if ver else "[ Sin comprobación calculada ]")
+        if hist:
+            lineas.append("\n── HISTORIAL DE PIVOTEO PASO A PASO ────────────────────────────────────────────")
+            lineas.append(hist)
+        return "\n".join(lineas)
+
+    def _obtener_resumen_romanos_texto(self):
+        r_rom = self.lbl_res_romano.cget("text")
+        r_ara = self.lbl_res_normal.cget("text")
+        desglose = self.txt_rom_desglose.get("1.0", tk.END).strip()
+        lineas = []
+        lineas.append("================================================================================")
+        lineas.append(f"  RESULTADO EN NÚMEROS ROMANOS:  {r_rom}")
+        lineas.append(f"  RESULTADO EN SISTEMA ÁRABE:   {r_ara}")
+        lineas.append("================================================================================\n")
+        lineas.append("── DESGLOSE Y PROCEDIMIENTO DETALLADO ──────────────────────────────────────────")
+        lineas.append(desglose if desglose else "[ Sin cálculo de números romanos registrado aún ]")
+        return "\n".join(lineas)
+
+    def _toggle_root_fullscreen(self, event=None):
+        self._root_fullscreen = not getattr(self, "_root_fullscreen", False)
+        try:
+            self.root.attributes("-fullscreen", self._root_fullscreen)
+        except Exception:
+            pass
 
     def _lbl(self, parent, text, color=C_WHITE, font=F_LABEL, **kw):
         return tk.Label(parent, text=text, font=font, bg=C_SECTION, fg=color, **kw)
@@ -354,9 +625,10 @@ class VentanaPrincipal:
                              side=tk.RIGHT, fill=tk.Y)
 
         for label, tipo, color in [
-            ("SOLUCION UNICA",     "unica",        C_OK),
-            ("INFINITAS SOLUCIONES","infinitas",   C_CAUTION),
-            ("INCONSISTENTE",      "inconsistente", C_WARN),
+            ("SOLUCION UNICA",      "unica",        C_OK),
+            ("INFINITAS SOLUCIONES","infinitas",    C_CAUTION),
+            ("INCONSISTENTE",       "inconsistente", C_WARN),
+            ("INVERSA DE MATRIZ",   "inversa",      C_NEON),
         ]:
             btn_frame = tk.Frame(ej, bg=C_SECTION)
             btn_frame.pack(fill=tk.X, pady=2)
@@ -381,7 +653,19 @@ class VentanaPrincipal:
         self.btn_resolver.pack(pady=(10, 2))
 
         # ── Abajo: Resultados ─────────────────────────────────────────────────
-        _, res = self._bloque(parent, "RESULTADOS", fill=tk.BOTH, expand=True)
+        wrap_res, res = self._bloque(parent, "RESULTADOS", fill=tk.BOTH, expand=True)
+
+        # Botón de informe completo a pantalla completa en la barra del bloque
+        btn_fs_gauss = tk.Button(
+            wrap_res.bar, text=" ⛶ PANTALLA COMPLETA ", font=F_SMALL,
+            bg="#061a36", fg=C_NEON, activebackground=C_ACCENT,
+            activeforeground=C_WHITE, bd=0, relief="flat", cursor="hand2", padx=8, pady=1,
+            command=lambda: self.abrir_consola_fullscreen(
+                "GAUSS-JORDAN · INFORME COMPLETO",
+                self._obtener_resumen_gauss_texto
+            )
+        )
+        btn_fs_gauss.pack(side=tk.RIGHT, padx=6, pady=2)
 
         nb = ttk.Notebook(res, style="Sub.TNotebook")
         nb.pack(fill=tk.BOTH, expand=True)
@@ -404,27 +688,40 @@ class VentanaPrincipal:
         col_r = tk.Frame(cols, bg=C_SECTION)
         col_r.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(6, 0))
 
-        tk.Label(col_l, text="VECTOR SOLUCION:", font=F_LABEL, bg=C_SECTION, fg=C_WHITE).pack(anchor="w", pady=(0, 4))
+        bar_l = tk.Frame(col_l, bg=C_SECTION)
+        bar_l.pack(fill=tk.X, pady=(0, 4))
+        tk.Label(bar_l, text="VECTOR SOLUCION:", font=F_LABEL, bg=C_SECTION, fg=C_WHITE).pack(side=tk.LEFT)
         self.txt_solucion = self._console(col_l, height=5)
         self.txt_solucion.pack(fill=tk.BOTH, expand=True)
+        self._conectar_consola_fullscreen(self.txt_solucion, "GAUSS-JORDAN · VECTOR SOLUCIÓN", bar_l)
 
-        tk.Label(col_r, text="COMPROBACION EN ECUACIONES ORIGINALES:", font=F_LABEL, bg=C_SECTION, fg=C_WHITE).pack(anchor="w", pady=(0, 4))
+        bar_r = tk.Frame(col_r, bg=C_SECTION)
+        bar_r.pack(fill=tk.X, pady=(0, 4))
+        tk.Label(bar_r, text="COMPROBACION EN ECUACIONES ORIGINALES:", font=F_LABEL, bg=C_SECTION, fg=C_WHITE).pack(side=tk.LEFT)
         self.txt_verificacion = self._console(col_r, height=5)
         self.txt_verificacion.pack(fill=tk.BOTH, expand=True)
+        self._conectar_consola_fullscreen(self.txt_verificacion, "GAUSS-JORDAN · COMPROBACIÓN", bar_r)
 
         # Pestaña: Historial
         t_hist = ttk.Frame(nb, padding="10")
         nb.add(t_hist, text="  HISTORIAL DE PIVOTEO PASO A PASO  ")
 
+        bar_h = tk.Frame(t_hist, bg=C_SECTION)
+        bar_h.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 4))
+        tk.Label(bar_h, text="HISTORIAL DE PIVOTEO (DOBLE CLIC PARA PANTALLA COMPLETA):",
+                 font=F_LABEL, bg=C_SECTION, fg=C_MUTED).pack(side=tk.LEFT)
+
         self.txt_historial = self._console(t_hist, height=10, wrap=tk.NONE)
         sc_y = ttk.Scrollbar(t_hist, orient="vertical", command=self.txt_historial.yview)
         sc_x = ttk.Scrollbar(t_hist, orient="horizontal", command=self.txt_historial.xview)
         self.txt_historial.configure(yscrollcommand=sc_y.set, xscrollcommand=sc_x.set)
-        self.txt_historial.grid(row=0, column=0, sticky="nsew")
-        sc_y.grid(row=0, column=1, sticky="ns")
-        sc_x.grid(row=1, column=0, sticky="ew")
-        t_hist.grid_rowconfigure(0, weight=1)
+        self.txt_historial.grid(row=1, column=0, sticky="nsew")
+        sc_y.grid(row=1, column=1, sticky="ns")
+        sc_x.grid(row=2, column=0, sticky="ew")
+        t_hist.grid_rowconfigure(1, weight=1)
         t_hist.grid_columnconfigure(0, weight=1)
+
+        self._conectar_consola_fullscreen(self.txt_historial, "GAUSS-JORDAN · HISTORIAL DE PIVOTEO", bar_h)
 
     def construir_cuadricula(self, m, n):
         for w in self.scroll_matriz.scrollable_frame.winfo_children():
@@ -481,12 +778,12 @@ class VentanaPrincipal:
     # MÓDULO 2 — VECTORIAL & MATRICIAL
     # ==========================================================================
     def _build_vectorial(self):
-        nb = ttk.Notebook(self.tab_vectorial, style="Sub.TNotebook")
-        nb.pack(fill=tk.BOTH, expand=True)
+        self.nb_vectorial = ttk.Notebook(self.tab_vectorial, style="Sub.TNotebook")
+        self.nb_vectorial.pack(fill=tk.BOTH, expand=True)
 
         # ── Sub-tab: Vectores ─────────────────────────────────────────────────
-        tv = ttk.Frame(nb, padding="12")
-        nb.add(tv, text="  VECTORES EN R^n  ")
+        tv = ttk.Frame(self.nb_vectorial, padding="12")
+        self.nb_vectorial.add(tv, text="  VECTORES EN R^n  ")
 
         _, cfg_v = self._bloque(tv, "CONFIGURACION", fill=tk.X, pady=(0, 8))
 
@@ -517,13 +814,15 @@ class VentanaPrincipal:
                    style="P.TButton",
                    command=self.controlador.operar_vectores).pack(pady=(0, 6))
 
-        _, res_v = self._bloque(tv, "RESULTADO", fill=tk.X)
+        wrap_v, res_v = self._bloque(tv, "RESULTADO", fill=tk.X)
         self.txt_res_vectores = self._console(res_v, height=7)
         self.txt_res_vectores.pack(fill=tk.BOTH)
+        self._conectar_consola_fullscreen(self.txt_res_vectores, "OPERACIONES VECTORIALES & COMBINACIÓN LINEAL", wrap_v.bar)
 
         # ── Sub-tab: Álgebra Matricial ────────────────────────────────────────
-        tm = ttk.Frame(nb, padding="12")
-        nb.add(tm, text="  ALGEBRA MATRICIAL  ( A+B, A-B, A×B )  ")
+        tm = ttk.Frame(self.nb_vectorial, padding="12")
+        self.tab_sub_matrices = tm
+        self.nb_vectorial.add(tm, text="  ALGEBRA MATRICIAL  ( A+B, A-B, A×B, A⁻¹ )  ")
 
         _, cfg_m = self._bloque(tm, "DIMENSIONES DE MATRICES", fill=tk.X, pady=(0, 8))
 
@@ -541,6 +840,18 @@ class VentanaPrincipal:
         ttk.Button(row_m, text="GENERAR MATRICES", style="P.TButton",
                    command=self.controlador.generar_matrices_ops).pack(side=tk.LEFT)
 
+        # Fila de ejemplos precargados para matrices
+        row_ej = tk.Frame(cfg_m, bg=C_SECTION)
+        row_ej.pack(fill=tk.X, pady=(8, 0))
+        tk.Label(row_ej, text="EJEMPLOS INVERSA:", font=F_LABEL, bg=C_SECTION, fg=C_GLOW).pack(side=tk.LEFT, padx=(0, 8))
+        for lbl, tipo in [
+            ("EJEMPLO 2×2", "inv_2x2"),
+            ("EJEMPLO 3×3", "inv_3x3"),
+            ("MATRIZ SINGULAR (NO INVERTIBLE)", "inv_singular"),
+        ]:
+            ttk.Button(row_ej, text=lbl, style="S.TButton",
+                       command=lambda t=tipo: self.controlador.cargar_ejemplo_matrices(t)).pack(side=tk.LEFT, padx=(0, 6))
+
         self.scroll_matrices_ops = ScrollableFrame(tm, bg_color=C_SECTION)
         self.scroll_matrices_ops.pack(fill=tk.BOTH, expand=True, pady=8)
         self.mat_entries_a = []
@@ -555,16 +866,22 @@ class VentanaPrincipal:
             ttk.Button(ctrl, text=txt, style="P.TButton",
                        command=lambda o=op: self.controlador.operar_matrices(o)).pack(side=tk.LEFT, padx=(0, 6))
 
-        tk.Label(ctrl, text="  ESCALAR c:", font=F_LABEL, bg=C_SECTION, fg=C_WHITE).pack(side=tk.LEFT, padx=(12, 4))
+        tk.Label(ctrl, text="  ESCALAR c:", font=F_LABEL, bg=C_SECTION, fg=C_WHITE).pack(side=tk.LEFT, padx=(8, 4))
         self.entrada_escalar_mat = self._entry(ctrl, width=6)
         self.entrada_escalar_mat.insert(0, "2")
         self.entrada_escalar_mat.pack(side=tk.LEFT, padx=(0, 6))
         ttk.Button(ctrl, text="c × A", style="S.TButton",
-                   command=lambda: self.controlador.operar_matrices("escalar")).pack(side=tk.LEFT)
+                   command=lambda: self.controlador.operar_matrices("escalar")).pack(side=tk.LEFT, padx=(0, 10))
 
-        _, res_m = self._bloque(tm, "RESULTADO", fill=tk.X)
+        ttk.Button(ctrl, text="A⁻¹ (INVERSA A)", style="P.TButton",
+                   command=lambda: self.controlador.operar_matrices("inversa_a")).pack(side=tk.LEFT, padx=(0, 6))
+        ttk.Button(ctrl, text="B⁻¹ (INVERSA B)", style="S.TButton",
+                   command=lambda: self.controlador.operar_matrices("inversa_b")).pack(side=tk.LEFT)
+
+        wrap_m, res_m = self._bloque(tm, "RESULTADO", fill=tk.X)
         self.txt_res_matrices = self._console(res_m, height=7)
         self.txt_res_matrices.pack(fill=tk.BOTH)
+        self._conectar_consola_fullscreen(self.txt_res_matrices, "ÁLGEBRA MATRICIAL & MATRIZ INVERSA", wrap_m.bar)
 
     def construir_vectores(self, n, k):
         for w in self.scroll_vectores.scrollable_frame.winfo_children():
@@ -683,10 +1000,11 @@ class VentanaPrincipal:
                    command=self.controlador.convertir_desde_decimal).pack(side=tk.LEFT)
 
         # Consola de resultados
-        _, res_c = self._bloque(parent, "DESGLOSE Y REGISTRO DE CALCULO",
+        wrap_c, res_c = self._bloque(parent, "DESGLOSE Y REGISTRO DE CALCULO",
                                 fill=tk.BOTH, expand=True)
         self.txt_resultados_conv = self._console(res_c, height=16, wrap=tk.WORD)
         self.txt_resultados_conv.pack(fill=tk.BOTH, expand=True)
+        self._conectar_consola_fullscreen(self.txt_resultados_conv, "CONVERSIÓN DE BASES NUMÉRICAS", wrap_c.bar)
 
     def mostrar_resultado_conversion(self, t):
         self._write(self.txt_resultados_conv, t); self._ops()
@@ -749,7 +1067,18 @@ class VentanaPrincipal:
         self.construir_campos_romanos(2)
 
         # Panel de resultados — 2 pestañas: Romano y Árabe
-        _, res = self._bloque(parent, "RESULTADOS", fill=tk.BOTH, expand=True)
+        wrap_rom_res, res = self._bloque(parent, "RESULTADOS", fill=tk.BOTH, expand=True)
+
+        btn_fs_rom = tk.Button(
+            wrap_rom_res.bar, text=" ⛶ PANTALLA COMPLETA ", font=F_SMALL,
+            bg="#061a36", fg=C_NEON, activebackground=C_ACCENT,
+            activeforeground=C_WHITE, bd=0, relief="flat", cursor="hand2", padx=8, pady=1,
+            command=lambda: self.abrir_consola_fullscreen(
+                "NÚMEROS ROMANOS · INFORME COMPLETO",
+                self._obtener_resumen_romanos_texto
+            )
+        )
+        btn_fs_rom.pack(side=tk.RIGHT, padx=6, pady=2)
 
         nb_r = ttk.Notebook(res, style="Sub.TNotebook")
         nb_r.pack(fill=tk.BOTH, expand=True)
@@ -779,9 +1108,15 @@ class VentanaPrincipal:
         )
         self.lbl_res_normal.pack(fill=tk.BOTH, expand=True)
 
-        # Detalle / desglose (texto pequeño, para quien lo quiera ver)
+        # Detalle / desglose
+        bar_rom = tk.Frame(self.tab_res_desglose, bg=C_SECTION)
+        bar_rom.pack(fill=tk.X, pady=(0, 4))
+        tk.Label(bar_rom, text="REGISTRO DETALLADO DEL CÁLCULO (DOBLE CLIC PARA MAXIMIZAR):",
+                 font=F_LABEL, bg=C_SECTION, fg=C_MUTED).pack(side=tk.LEFT)
+
         self.txt_rom_desglose = self._console(self.tab_res_desglose, wrap=tk.WORD)
         self.txt_rom_desglose.pack(fill=tk.BOTH, expand=True)
+        self._conectar_consola_fullscreen(self.txt_rom_desglose, "NÚMEROS ROMANOS · DESGLOSE DE CÁLCULO", bar_rom)
 
     def construir_campos_romanos(self, cantidad):
         for w in self.scroll_romanos.scrollable_frame.winfo_children():
