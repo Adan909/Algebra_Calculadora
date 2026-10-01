@@ -246,17 +246,20 @@ class Controlador:
             filas_b = int(self.vista.spin_fb.get())
             columnas_b = int(self.vista.spin_cb.get())
             dimensiones = [filas_a, columnas_a, filas_b, columnas_b]
-            if not all(1 <= valor <= 10 for valor in dimensiones):
+            if not all(valor >= 1 for valor in dimensiones):
                 raise ValueError
         except ValueError:
-            self.vista.mostrar_error("Error", "Las dimensiones deben estar entre 1 y 10.")
+            self.vista.mostrar_error("Error", "Las dimensiones deben ser números enteros mayores o iguales a 1.")
             return
 
         self.vista.construir_matrices_ops(filas_a, columnas_a, filas_b, columnas_b)
 
     def leer_matriz(self, entradas):
         from fractions import Fraction
-        return [[Fraction(entry.get()) for entry in fila] for fila in entradas]
+        try:
+            return [[Fraction(entry.get().strip()) for entry in fila] for fila in entradas]
+        except (ValueError, ZeroDivisionError):
+            raise ValueError("Todos los elementos de la matriz deben ser números reales válidos (enteros o fracciones como a/b).")
 
     def formatear_matriz_resultado(self, matriz):
         texto = ""
@@ -269,34 +272,53 @@ class Controlador:
 
     def operar_matrices(self, operacion):
         try:
-            A = self.leer_matriz(self.vista.mat_entries_a)
-            B = self.leer_matriz(self.vista.mat_entries_b)
+            if operacion in ("suma", "resta", "multiplicacion"):
+                A = self.leer_matriz(self.vista.mat_entries_a)
+                B = self.leer_matriz(self.vista.mat_entries_b)
+                if operacion == "suma":
+                    resultado = sumar_matrices(A, B)
+                    titulo = "A + B"
+                elif operacion == "resta":
+                    resultado = restar_matrices(A, B)
+                    titulo = "A − B"
+                else:
+                    resultado = multiplicar_matrices(A, B)
+                    titulo = "A × B"
+                texto = f"RESULTADO: {titulo}\n\n" + self.formatear_matriz_resultado(resultado)
 
-            if operacion == "suma":
-                resultado = sumar_matrices(A, B)
-                titulo = "A + B"
-                texto = f"RESULTADO: {titulo}\n\n"
-                texto += self.formatear_matriz_resultado(resultado)
-            elif operacion == "resta":
-                resultado = restar_matrices(A, B)
-                titulo = "A − B"
-                texto = f"RESULTADO: {titulo}\n\n"
-                texto += self.formatear_matriz_resultado(resultado)
-            elif operacion == "multiplicacion":
-                resultado = multiplicar_matrices(A, B)
-                titulo = "A × B"
-                texto = f"RESULTADO: {titulo}\n\n"
-                texto += self.formatear_matriz_resultado(resultado)
             elif operacion == "escalar":
+                A = self.leer_matriz(self.vista.mat_entries_a)
                 from fractions import Fraction
-                escalar = Fraction(self.vista.entrada_escalar_mat.get())
+                escalar = Fraction(self.vista.entrada_escalar_mat.get().strip())
                 resultado = multiplicar_matriz_escalar(A, escalar)
                 titulo = f"{formatear_fraccion(escalar)}A"
-                texto = f"RESULTADO: {titulo}\n\n"
-                texto += self.formatear_matriz_resultado(resultado)
+                texto = f"RESULTADO: {titulo}\n\n" + self.formatear_matriz_resultado(resultado)
+
             elif operacion == "inversa_a":
-                inversa, pasos = invertir_matriz_con_pasos(A)
-                titulo = "INVERSA DE LA MATRIZ A (A⁻¹)"
+                filas_a = len(self.vista.mat_entries_a)
+                columnas_a = len(self.vista.mat_entries_a[0]) if filas_a > 0 else 0
+                if filas_a == 0 or columnas_a == 0 or filas_a != columnas_a:
+                    self.vista.mostrar_error(
+                        "Error de Dimensión",
+                        f"Para calcular la matriz inversa, la matriz debe ser cuadrada (n × n).\n"
+                        f"Dimensión actual de la Matriz A: {filas_a} fila(s) × {columnas_a} columna(s)."
+                    )
+                    return
+
+                if filas_a > 10:
+                    confirmado = self.vista.confirmar_proceso_inversa_grande(filas_a, "Matriz A")
+                    if not confirmado:
+                        return
+
+                A = self.leer_matriz(self.vista.mat_entries_a)
+                try:
+                    self.vista.root.config(cursor="watch")
+                    self.vista.root.update_idletasks()
+                    inversa, pasos = invertir_matriz_con_pasos(A)
+                finally:
+                    self.vista.root.config(cursor="")
+
+                titulo = f"INVERSA DE LA MATRIZ A (A⁻¹) — ORDEN {filas_a}×{columnas_a}"
                 texto = f"==========================================================\n"
                 texto += f"RESULTADO: {titulo}\n"
                 texto += f"==========================================================\n\n"
@@ -311,9 +333,32 @@ class Controlador:
                 texto += "DESGLOSE DE OPERACIONES ELEMENTALES POR FILA (GAUSS-JORDAN):\n"
                 texto += "----------------------------------------------------------\n"
                 texto += "\n".join(pasos) + "\n"
+
             elif operacion == "inversa_b":
-                inversa, pasos = invertir_matriz_con_pasos(B)
-                titulo = "INVERSA DE LA MATRIZ B (B⁻¹)"
+                filas_b = len(self.vista.mat_entries_b)
+                columnas_b = len(self.vista.mat_entries_b[0]) if filas_b > 0 else 0
+                if filas_b == 0 or columnas_b == 0 or filas_b != columnas_b:
+                    self.vista.mostrar_error(
+                        "Error de Dimensión",
+                        f"Para calcular la matriz inversa, la matriz debe ser cuadrada (n × n).\n"
+                        f"Dimensión actual de la Matriz B: {filas_b} fila(s) × {columnas_b} columna(s)."
+                    )
+                    return
+
+                if filas_b > 10:
+                    confirmado = self.vista.confirmar_proceso_inversa_grande(filas_b, "Matriz B")
+                    if not confirmado:
+                        return
+
+                B = self.leer_matriz(self.vista.mat_entries_b)
+                try:
+                    self.vista.root.config(cursor="watch")
+                    self.vista.root.update_idletasks()
+                    inversa, pasos = invertir_matriz_con_pasos(B)
+                finally:
+                    self.vista.root.config(cursor="")
+
+                titulo = f"INVERSA DE LA MATRIZ B (B⁻¹) — ORDEN {filas_b}×{columnas_b}"
                 texto = f"==========================================================\n"
                 texto += f"RESULTADO: {titulo}\n"
                 texto += f"==========================================================\n\n"
@@ -427,6 +472,8 @@ class Controlador:
             self.vista.mostrar_error("Error en Operación", resultado['error'])
 
     def evaluar_expresion_romana(self):
+        if not getattr(self.vista, "entry_expresion_romana", None):
+            return
         exp = self.vista.entry_expresion_romana.get().strip()
         if not exp:
             self.vista.mostrar_error("Error", "Por favor ingrese una expresión romana.")

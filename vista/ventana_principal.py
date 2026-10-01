@@ -40,9 +40,9 @@ F_DISPLAY  = ("JetBrains Mono", 15, "bold")
 F_HEADING  = ("JetBrains Mono", 11, "bold")
 F_SUBHEAD  = ("JetBrains Mono", 10, "bold")
 F_LABEL    = ("Courier New", 9, "bold")
-F_MONO     = ("JetBrains Mono", 9)
-F_MONO_B   = ("JetBrains Mono", 9, "bold")
-F_MONO_LG  = ("JetBrains Mono", 11, "bold")
+F_MONO     = ("JetBrains Mono", 10)
+F_MONO_B   = ("JetBrains Mono", 10, "bold")
+F_MONO_LG  = ("JetBrains Mono", 12, "bold")
 F_MATRIX   = ("Consolas", 11, "bold")
 F_SMALL    = ("Courier New", 8)
 
@@ -55,8 +55,8 @@ class VentanaPrincipal:
     def __init__(self, root, controlador):
         self.root = root
         self.root.title("ALGEBRA COMPUTATION SYSTEM  ·  KERNEL v3.0")
-        self.root.geometry("1200x880")
-        self.root.minsize(1040, 760)
+        self.root.geometry("1260x900")
+        self.root.minsize(1080, 800)
         self.root.configure(bg=C_ROOT)
 
         self.controlador = controlador
@@ -551,7 +551,7 @@ class VentanaPrincipal:
                         highlightthickness=1, highlightbackground=hbg,
                         highlightcolor=C_GLOW, **kw)
 
-    def _console(self, parent, height=6, wrap=tk.WORD, **kw):
+    def _console(self, parent, height=12, wrap=tk.WORD, **kw):
         return tk.Text(parent, height=height, font=F_MONO,
                        bg=C_INPUT, fg=C_WHITE,
                        insertbackground=C_NEON,
@@ -639,7 +639,7 @@ class VentanaPrincipal:
 
         # ── Centro: Matriz aumentada ──────────────────────────────────────────
         _, mat = self._bloque(parent, "MATRIZ AUMENTADA   [ A | b ]",
-                              fill=tk.BOTH, expand=True, pady=(0, 8))
+                              fill=tk.X, expand=False, pady=(0, 8))
 
         self.scroll_matriz = ScrollableFrame(mat, bg_color=C_SECTION)
         self.scroll_matriz.pack(fill=tk.BOTH, expand=True)
@@ -691,14 +691,14 @@ class VentanaPrincipal:
         bar_l = tk.Frame(col_l, bg=C_SECTION)
         bar_l.pack(fill=tk.X, pady=(0, 4))
         tk.Label(bar_l, text="VECTOR SOLUCION:", font=F_LABEL, bg=C_SECTION, fg=C_WHITE).pack(side=tk.LEFT)
-        self.txt_solucion = self._console(col_l, height=5)
+        self.txt_solucion = self._console(col_l, height=8)
         self.txt_solucion.pack(fill=tk.BOTH, expand=True)
         self._conectar_consola_fullscreen(self.txt_solucion, "GAUSS-JORDAN · VECTOR SOLUCIÓN", bar_l)
 
         bar_r = tk.Frame(col_r, bg=C_SECTION)
         bar_r.pack(fill=tk.X, pady=(0, 4))
         tk.Label(bar_r, text="COMPROBACION EN ECUACIONES ORIGINALES:", font=F_LABEL, bg=C_SECTION, fg=C_WHITE).pack(side=tk.LEFT)
-        self.txt_verificacion = self._console(col_r, height=5)
+        self.txt_verificacion = self._console(col_r, height=8)
         self.txt_verificacion.pack(fill=tk.BOTH, expand=True)
         self._conectar_consola_fullscreen(self.txt_verificacion, "GAUSS-JORDAN · COMPROBACIÓN", bar_r)
 
@@ -711,7 +711,7 @@ class VentanaPrincipal:
         tk.Label(bar_h, text="HISTORIAL DE PIVOTEO (DOBLE CLIC PARA PANTALLA COMPLETA):",
                  font=F_LABEL, bg=C_SECTION, fg=C_MUTED).pack(side=tk.LEFT)
 
-        self.txt_historial = self._console(t_hist, height=10, wrap=tk.NONE)
+        self.txt_historial = self._console(t_hist, height=18, wrap=tk.NONE)
         sc_y = ttk.Scrollbar(t_hist, orient="vertical", command=self.txt_historial.yview)
         sc_x = ttk.Scrollbar(t_hist, orient="horizontal", command=self.txt_historial.xview)
         self.txt_historial.configure(yscrollcommand=sc_y.set, xscrollcommand=sc_x.set)
@@ -814,9 +814,14 @@ class VentanaPrincipal:
                    style="P.TButton",
                    command=self.controlador.operar_vectores).pack(pady=(0, 6))
 
-        wrap_v, res_v = self._bloque(tv, "RESULTADO", fill=tk.X)
-        self.txt_res_vectores = self._console(res_v, height=7)
-        self.txt_res_vectores.pack(fill=tk.BOTH)
+        wrap_v, res_v = self._bloque(tv, "RESULTADO", fill=tk.BOTH, expand=True)
+        frame_txt_v = tk.Frame(res_v, bg=C_SECTION)
+        frame_txt_v.pack(fill=tk.BOTH, expand=True)
+        self.txt_res_vectores = self._console(frame_txt_v, height=14)
+        sc_v = ttk.Scrollbar(frame_txt_v, orient="vertical", command=self.txt_res_vectores.yview)
+        self.txt_res_vectores.configure(yscrollcommand=sc_v.set)
+        self.txt_res_vectores.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        sc_v.pack(side=tk.RIGHT, fill=tk.Y)
         self._conectar_consola_fullscreen(self.txt_res_vectores, "OPERACIONES VECTORIALES & COMBINACIÓN LINEAL", wrap_v.bar)
 
         # ── Sub-tab: Álgebra Matricial ────────────────────────────────────────
@@ -830,12 +835,12 @@ class VentanaPrincipal:
         row_m.pack(fill=tk.X)
 
         tk.Label(row_m, text="MATRIZ A ( f × c ):", font=F_LABEL, bg=C_SECTION, fg=C_WHITE).pack(side=tk.LEFT, padx=(0, 4))
-        self.spin_fa = ttk.Spinbox(row_m, from_=1, to=10, width=4); self.spin_fa.set(2); self.spin_fa.pack(side=tk.LEFT, padx=2)
-        self.spin_ca = ttk.Spinbox(row_m, from_=1, to=10, width=4); self.spin_ca.set(2); self.spin_ca.pack(side=tk.LEFT, padx=(2, 16))
+        self.spin_fa = ttk.Spinbox(row_m, from_=1, to=100, width=4); self.spin_fa.set(2); self.spin_fa.pack(side=tk.LEFT, padx=2)
+        self.spin_ca = ttk.Spinbox(row_m, from_=1, to=100, width=4); self.spin_ca.set(2); self.spin_ca.pack(side=tk.LEFT, padx=(2, 16))
 
         tk.Label(row_m, text="MATRIZ B ( f × c ):", font=F_LABEL, bg=C_SECTION, fg=C_WHITE).pack(side=tk.LEFT, padx=(0, 4))
-        self.spin_fb = ttk.Spinbox(row_m, from_=1, to=10, width=4); self.spin_fb.set(2); self.spin_fb.pack(side=tk.LEFT, padx=2)
-        self.spin_cb = ttk.Spinbox(row_m, from_=1, to=10, width=4); self.spin_cb.set(2); self.spin_cb.pack(side=tk.LEFT, padx=(2, 16))
+        self.spin_fb = ttk.Spinbox(row_m, from_=1, to=100, width=4); self.spin_fb.set(2); self.spin_fb.pack(side=tk.LEFT, padx=2)
+        self.spin_cb = ttk.Spinbox(row_m, from_=1, to=100, width=4); self.spin_cb.set(2); self.spin_cb.pack(side=tk.LEFT, padx=(2, 16))
 
         ttk.Button(row_m, text="GENERAR MATRICES", style="P.TButton",
                    command=self.controlador.generar_matrices_ops).pack(side=tk.LEFT)
@@ -878,9 +883,18 @@ class VentanaPrincipal:
         ttk.Button(ctrl, text="B⁻¹ (INVERSA B)", style="S.TButton",
                    command=lambda: self.controlador.operar_matrices("inversa_b")).pack(side=tk.LEFT)
 
-        wrap_m, res_m = self._bloque(tm, "RESULTADO", fill=tk.X)
-        self.txt_res_matrices = self._console(res_m, height=7)
-        self.txt_res_matrices.pack(fill=tk.BOTH)
+        wrap_m, res_m = self._bloque(tm, "RESULTADO", fill=tk.BOTH, expand=True)
+        frame_txt_m = tk.Frame(res_m, bg=C_SECTION)
+        frame_txt_m.pack(fill=tk.BOTH, expand=True)
+        self.txt_res_matrices = self._console(frame_txt_m, height=18, wrap=tk.NONE)
+        sc_my = ttk.Scrollbar(frame_txt_m, orient="vertical", command=self.txt_res_matrices.yview)
+        sc_mx = ttk.Scrollbar(frame_txt_m, orient="horizontal", command=self.txt_res_matrices.xview)
+        self.txt_res_matrices.configure(yscrollcommand=sc_my.set, xscrollcommand=sc_mx.set)
+        self.txt_res_matrices.grid(row=0, column=0, sticky="nsew")
+        sc_my.grid(row=0, column=1, sticky="ns")
+        sc_mx.grid(row=1, column=0, sticky="ew")
+        frame_txt_m.grid_rowconfigure(0, weight=1)
+        frame_txt_m.grid_columnconfigure(0, weight=1)
         self._conectar_consola_fullscreen(self.txt_res_matrices, "ÁLGEBRA MATRICIAL & MATRIZ INVERSA", wrap_m.bar)
 
     def construir_vectores(self, n, k):
@@ -1002,8 +1016,13 @@ class VentanaPrincipal:
         # Consola de resultados
         wrap_c, res_c = self._bloque(parent, "DESGLOSE Y REGISTRO DE CALCULO",
                                 fill=tk.BOTH, expand=True)
-        self.txt_resultados_conv = self._console(res_c, height=16, wrap=tk.WORD)
-        self.txt_resultados_conv.pack(fill=tk.BOTH, expand=True)
+        frame_txt_c = tk.Frame(res_c, bg=C_SECTION)
+        frame_txt_c.pack(fill=tk.BOTH, expand=True)
+        self.txt_resultados_conv = self._console(frame_txt_c, height=22, wrap=tk.WORD)
+        sc_cy = ttk.Scrollbar(frame_txt_c, orient="vertical", command=self.txt_resultados_conv.yview)
+        self.txt_resultados_conv.configure(yscrollcommand=sc_cy.set)
+        self.txt_resultados_conv.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        sc_cy.pack(side=tk.RIGHT, fill=tk.Y)
         self._conectar_consola_fullscreen(self.txt_resultados_conv, "CONVERSIÓN DE BASES NUMÉRICAS", wrap_c.bar)
 
     def mostrar_resultado_conversion(self, t):
@@ -1011,52 +1030,46 @@ class VentanaPrincipal:
 
     # ==========================================================================
     # MÓDULO 4 — NUMEROS ROMANOS
-    # Layout: [Config + Expresion] [Entradas dinamicas] [Resultados]
+    # Layout: [Configuracion] [Entradas dinamicas] [Resultados]
     # ==========================================================================
     def _build_romanos(self):
         parent = self.tab_romanos
 
-        # Fila superior: configuración + expresión libre
+        # Fila superior: configuración
         top = tk.Frame(parent, bg=C_PANEL)
         top.pack(fill=tk.X, pady=(0, 8))
 
-        # Bloque izquierdo: configuración
-        _, cfg_r = self._bloque(top, "NUMEROS ROMANOS",
-                                side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 6))
+        # Bloque de configuración
+        _, cfg_r = self._bloque(top, "NUMEROS ROMANOS — OPERACIONES ARITMETICAS",
+                                fill=tk.BOTH, expand=True)
 
         row1 = tk.Frame(cfg_r, bg=C_SECTION)
         row1.pack(fill=tk.X, pady=(0, 6))
 
+        tk.Label(row1, text="OPERANDOS:", font=F_LABEL, bg=C_SECTION, fg=C_WHITE).pack(side=tk.LEFT, padx=(0, 6))
         self.spin_cant_romanos = ttk.Spinbox(row1, from_=2, to=10, width=4)
         self.spin_cant_romanos.set(2)
         self.spin_cant_romanos.pack(side=tk.LEFT, padx=(0, 10))
         ttk.Button(row1, text="GENERAR", style="S.TButton",
                    command=self.controlador.generar_campos_romanos).pack(side=tk.LEFT, padx=(0, 16))
 
+        tk.Label(row1, text="OPERACIÓN:", font=F_LABEL, bg=C_SECTION, fg=C_WHITE).pack(side=tk.LEFT, padx=(0, 6))
         self.op_romanos = tk.StringVar(value="Suma (+)")
         self.combo_op_romanos = ttk.Combobox(row1, textvariable=self.op_romanos,
                                               values=("Suma (+)", "Resta (-)", "Multiplicación (×)", "División (÷)"),
                                               state="readonly", width=18)
         self.combo_op_romanos.pack(side=tk.LEFT, padx=(0, 10))
         ttk.Button(row1, text="CALCULAR", style="P.TButton",
-                   command=self.controlador.calcular_operacion_romanos).pack(side=tk.LEFT)
+                   command=self.controlador.calcular_operacion_romanos).pack(side=tk.LEFT, padx=(0, 16))
 
         row2 = tk.Frame(cfg_r, bg=C_SECTION)
-        row2.pack(fill=tk.X)
+        row2.pack(fill=tk.X, pady=(4, 0))
+        tk.Label(row2, text="EJEMPLOS:", font=F_LABEL, bg=C_SECTION, fg=C_MUTED).pack(side=tk.LEFT, padx=(0, 6))
         for lbl, tipo in [("SUMA 3", "suma3"), ("MULT", "mult"), ("DIV", "div"), ("RESTA", "resta3")]:
             ttk.Button(row2, text=lbl, style="S.TButton",
                        command=lambda t=tipo: self.controlador.cargar_ejemplo_romanos(t)).pack(side=tk.LEFT, padx=(0, 4))
 
-        # Bloque derecho: expresión libre
-        _, cfg_e = self._bloque(top, "EXPRESION LIBRE",
-                                color_acento=C_GLOW,
-                                side=tk.RIGHT, fill=tk.Y, padx=(6, 0))
-
-        self.entry_expresion_romana = self._entry(cfg_e, width=26)
-        self.entry_expresion_romana.insert(0, "XVI + IV + II")
-        self.entry_expresion_romana.pack(fill=tk.X, pady=(0, 8))
-        ttk.Button(cfg_e, text="EVALUAR", style="P.TButton",
-                   command=self.controlador.evaluar_expresion_romana).pack(fill=tk.X)
+        self.entry_expresion_romana = None
 
         # Panel de entradas dinámicas
         _, inp = self._bloque(parent, "OPERANDOS",
@@ -1114,8 +1127,15 @@ class VentanaPrincipal:
         tk.Label(bar_rom, text="REGISTRO DETALLADO DEL CÁLCULO (DOBLE CLIC PARA MAXIMIZAR):",
                  font=F_LABEL, bg=C_SECTION, fg=C_MUTED).pack(side=tk.LEFT)
 
-        self.txt_rom_desglose = self._console(self.tab_res_desglose, wrap=tk.WORD)
-        self.txt_rom_desglose.pack(fill=tk.BOTH, expand=True)
+        frame_txt_rom = tk.Frame(self.tab_res_desglose, bg=C_SECTION)
+        frame_txt_rom.pack(fill=tk.BOTH, expand=True)
+
+        self.txt_rom_desglose = self._console(frame_txt_rom, height=18, wrap=tk.WORD)
+        sc_rom = ttk.Scrollbar(frame_txt_rom, orient="vertical", command=self.txt_rom_desglose.yview)
+        self.txt_rom_desglose.configure(yscrollcommand=sc_rom.set)
+        self.txt_rom_desglose.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        sc_rom.pack(side=tk.RIGHT, fill=tk.Y)
+
         self._conectar_consola_fullscreen(self.txt_rom_desglose, "NÚMEROS ROMANOS · DESGLOSE DE CÁLCULO", bar_rom)
 
     def construir_campos_romanos(self, cantidad):
@@ -1177,3 +1197,113 @@ class VentanaPrincipal:
 
     def mostrar_error(self, titulo, mensaje):
         messagebox.showerror(titulo, mensaje)
+
+    def confirmar_proceso_inversa_grande(self, n, nombre_matriz="Matriz"):
+        """
+        Muestra una alerta modal cuando una matriz cuadrada supera 10x10.
+        Menciona el tiempo promedio estimado que tardará el cálculo por Gauss-Jordan
+        con aritmética fraccionaria exacta.
+        Presenta abajo dos opciones claras: CANCELAR y CONFIRMAR.
+        Retorna True si el usuario confirma, o False si cancela.
+        """
+        # Estimación de tiempo promedio empírico para cálculo exacto y desglose
+        seg = 0.0006 * (n ** 3.1)
+        if seg < 1.8:
+            tiempo_str = "aproximadamente 1 a 2 segundos"
+        elif seg < 60:
+            s_val = int(round(seg))
+            tiempo_str = f"aproximadamente {s_val} a {s_val + 3} segundos"
+        else:
+            mins = round(seg / 60, 1)
+            tiempo_str = f"aproximadamente {mins} minuto(s)"
+
+        resultado = [False]
+
+        dlg = tk.Toplevel(self.root)
+        dlg.title("Confirmación de Proceso · Matriz Inversa")
+        dlg.configure(bg=C_ROOT)
+        dlg.transient(self.root)
+        dlg.resizable(False, False)
+
+        # Centrar la alerta sobre la ventana principal
+        w, h = 560, 320
+        self.root.update_idletasks()
+        rx = self.root.winfo_x()
+        ry = self.root.winfo_y()
+        rw = self.root.winfo_width()
+        rh = self.root.winfo_height()
+        x = rx + max(0, (rw - w) // 2)
+        y = ry + max(0, (rh - h) // 2)
+        dlg.geometry(f"{w}x{h}+{x}+{y}")
+
+        # Cabecera técnica de advertencia
+        top_bar = tk.Frame(dlg, bg=C_HEADER, height=36)
+        top_bar.pack(fill=tk.X)
+        top_bar.pack_propagate(False)
+
+        tk.Frame(top_bar, bg=C_WARN, width=5).pack(side=tk.LEFT, fill=tk.Y)
+        tk.Label(
+            top_bar,
+            text=f"  ⚠ ADVERTENCIA · CÁLCULO DE MATRIZ {n}×{n}",
+            font=F_SUBHEAD, bg=C_HEADER, fg=C_WARN
+        ).pack(side=tk.LEFT, pady=6)
+
+        # Contenido del mensaje
+        body = tk.Frame(dlg, bg=C_SECTION, padx=18, pady=14,
+                        highlightthickness=1, highlightbackground=C_BORDER)
+        body.pack(fill=tk.BOTH, expand=True, padx=12, pady=(10, 0))
+
+        msg1 = (
+            f"Ha solicitado invertir una matriz de tamaño {n}×{n} ({nombre_matriz}), la cual\n"
+            f"supera el límite estándar de 10×10.\n\n"
+            f"El cálculo mediante Gauss-Jordan con precisión racional exacta generará\n"
+            f"múltiples transformaciones elementales por fila y desgloses de pasos."
+        )
+        tk.Label(body, text=msg1, font=F_LABEL, bg=C_SECTION, fg=C_WHITE, justify=tk.LEFT).pack(anchor="w", pady=(0, 10))
+
+        # Panel destacado con el tiempo estimado
+        box_tiempo = tk.Frame(body, bg="#061933", padx=12, pady=8,
+                              highlightthickness=1, highlightbackground=C_ACCENT)
+        box_tiempo.pack(fill=tk.X, pady=(0, 10))
+
+        tk.Label(box_tiempo, text="⏱  TIEMPO PROMEDIO ESTIMADO:",
+                 font=F_LABEL, bg="#061933", fg=C_NEON).pack(anchor="w")
+        tk.Label(box_tiempo, text=f"    {tiempo_str.upper()}",
+                 font=F_MONO_LG, bg="#061933", fg=C_WHITE).pack(anchor="w", pady=(2, 0))
+
+        tk.Label(body, text="¿Desea confirmar y proceder con el cálculo o cancelar la operación?",
+                 font=F_LABEL, bg=C_SECTION, fg=C_SILVER).pack(anchor="w")
+
+        # Barra de botones: Cancelar y Confirmar
+        btn_bar = tk.Frame(dlg, bg=C_ROOT, padx=14, pady=12)
+        btn_bar.pack(fill=tk.X, side=tk.BOTTOM)
+
+        def on_cancelar(event=None):
+            resultado[0] = False
+            dlg.destroy()
+
+        def on_confirmar(event=None):
+            resultado[0] = True
+            dlg.destroy()
+
+        dlg.protocol("WM_DELETE_WINDOW", on_cancelar)
+        dlg.bind("<Escape>", on_cancelar)
+        dlg.bind("<Return>", on_confirmar)
+
+        btn_cancel = tk.Button(
+            btn_bar, text="  ✕  CANCELAR  ", font=F_MONO_B,
+            bg=C_HEADER, fg=C_SILVER, activebackground="#1e293b", activeforeground=C_WHITE,
+            bd=0, relief="flat", cursor="hand2", padx=18, pady=7, command=on_cancelar
+        )
+        btn_cancel.pack(side=tk.RIGHT, padx=(8, 0))
+
+        btn_ok = tk.Button(
+            btn_bar, text="  ✔  CONFIRMAR  ", font=F_MONO_B,
+            bg=C_ACCENT, fg=C_WHITE, activebackground=C_BRIGHT, activeforeground=C_WHITE,
+            bd=0, relief="flat", cursor="hand2", padx=20, pady=7, command=on_confirmar
+        )
+        btn_ok.pack(side=tk.RIGHT)
+
+        dlg.grab_set()
+        self.root.wait_window(dlg)
+        return resultado[0]
