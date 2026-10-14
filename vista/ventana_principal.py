@@ -883,6 +883,11 @@ class VentanaPrincipal:
         ttk.Button(ctrl, text="B⁻¹ (INVERSA B)", style="S.TButton",
                    command=lambda: self.controlador.operar_matrices("inversa_b")).pack(side=tk.LEFT)
 
+        ttk.Button(ctrl, text="det(A) SARRUS", style="P.TButton",
+               command=lambda: self.controlador.operar_matrices("determinante_sarrus")).pack(side=tk.LEFT, padx=(6, 0))
+        ttk.Button(ctrl, text="det(A) COFACTORES", style="S.TButton",
+               command=lambda: self.controlador.operar_matrices("determinante_cofactores")).pack(side=tk.LEFT, padx=(6, 0))
+
         wrap_m, res_m = self._bloque(tm, "RESULTADO", fill=tk.BOTH, expand=True)
         frame_txt_m = tk.Frame(res_m, bg=C_SECTION)
         frame_txt_m.pack(fill=tk.BOTH, expand=True)

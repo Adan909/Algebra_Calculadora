@@ -3,6 +3,115 @@
 from fractions import Fraction
 
 
+def determinante_sarrus(A):
+    """Retorna el determinante 3x3 y los pasos de la regla de Sarrus."""
+    if len(A) != 3 or any(len(fila) != 3 for fila in A):
+        raise ValueError("La regla de Sarrus solo se aplica a matrices 3×3.")
+
+    a, b, c = A[0]
+    d, e, f = A[1]
+    g, h, i = A[2]
+    descendentes = (a * e * i, b * f * g, c * d * h)
+    ascendentes = (c * e * g, b * d * i, a * f * h)
+    suma_descendentes = sum(descendentes, Fraction(0))
+    suma_ascendentes = sum(ascendentes, Fraction(0))
+    determinante = suma_descendentes - suma_ascendentes
+
+    pasos = [
+        "Paso 1: Copiamos las dos primeras columnas a la derecha de la matriz:",
+    ]
+    ancho = max(len(str(valor)) for fila in A for valor in fila)
+    for fila in A:
+        parte_original = "  ".join(f"{valor:>{ancho}}" for valor in fila)
+        columnas_copiadas = "  ".join(
+            f"{valor:>{ancho}}" for valor in fila[:2]
+        )
+        pasos.append(f"  [ {parte_original}  |  {columnas_copiadas} ]")
+
+    pasos.extend([
+        "Paso 2: Identificamos las diagonales descendentes (se suman).",
+        f"  aei = {a} × {e} × {i} = {descendentes[0]}",
+        f"  bfg = {b} × {f} × {g} = {descendentes[1]}",
+        f"  cdh = {c} × {d} × {h} = {descendentes[2]}",
+        f"  Suma descendente = {suma_descendentes}",
+        "Paso 3: Identificamos las diagonales ascendentes (se restan).",
+        f"  ceg = {c} × {e} × {g} = {ascendentes[0]}",
+        f"  bdi = {b} × {d} × {i} = {ascendentes[1]}",
+        f"  afh = {a} × {f} × {h} = {ascendentes[2]}",
+        f"  Suma ascendente = {suma_ascendentes}",
+        "Paso 4: Restamos ambas sumas.",
+        f"  det(A) = {suma_descendentes} - {suma_ascendentes} = {determinante}",
+    ])
+    return determinante, pasos
+
+
+def determinante_cofactores(A):
+    """Retorna el determinante y su desarrollo recursivo por cofactores."""
+    if len(A) == 0 or any(len(fila) != len(A) for fila in A):
+        raise ValueError("Para calcular el determinante, la matriz debe ser cuadrada y no vacía.")
+
+    pasos = []
+
+    def registrar_paso(mensaje, nivel):
+        pasos.append(f"Paso {len(pasos) + 1}: {'  ' * nivel}{mensaje}")
+
+    def calcular(matriz, nivel=0):
+        orden = len(matriz)
+
+        if orden == 1:
+            valor = matriz[0][0]
+            registrar_paso(f"Matriz 1×1: det = {valor}.", nivel)
+            return valor
+        if orden == 2:
+            a, b = matriz[0]
+            c, d = matriz[1]
+            resultado = a * d - b * c
+            registrar_paso(
+                f"Matriz 2×2: det = ({a} × {d}) - ({b} × {c}) = {resultado}.",
+                nivel,
+            )
+            return resultado
+
+        registrar_paso(
+            "Expandimos por la primera fila, alternando los signos +, -, +.",
+            nivel,
+        )
+        terminos = []
+        determinante = Fraction(0)
+        for columna, valor in enumerate(matriz[0]):
+            menor = [
+                [matriz[fila][j] for j in range(orden) if j != columna]
+                for fila in range(1, orden)
+            ]
+            signo = -1 if columna % 2 else 1
+            menor_formateado = "\n".join(
+                "      [ " + "  ".join(str(elemento) for elemento in fila) + " ]"
+                for fila in menor
+            )
+            registrar_paso(
+                f"Elemento elegido: {valor} (posición a_1,{columna + 1}).\n"
+                f"Para formar su menor, eliminamos la fila 1 y la columna {columna + 1}.\n"
+                f"  Signo del cofactor: {'+' if signo > 0 else '-'} por la posición.\n"
+                f"  Menor resultante:\n{menor_formateado}",
+                nivel,
+            )
+            determinante_menor = calcular(menor, nivel + 1)
+            termino = signo * valor * determinante_menor
+            determinante += termino
+            terminos.append(
+                f"{'+' if signo > 0 else '-'} ({valor} × {determinante_menor})"
+            )
+            registrar_paso(f"Aportación de este cofactor: {termino}.", nivel)
+
+        registrar_paso(
+            f"Sumamos los cofactores: {' '.join(terminos)} = {determinante}.",
+            nivel,
+        )
+        return determinante
+
+    return calcular(A), pasos
+
+
 def validar_misma_dimension(A, B):
     """
     Verifica que dos matrices tengan las mismas dimensiones.

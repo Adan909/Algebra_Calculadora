@@ -14,6 +14,8 @@ from modelo.operaciones_matrices import (
     restar_matrices,
     multiplicar_matriz_escalar,
     multiplicar_matrices,
+    determinante_sarrus,
+    determinante_cofactores,
     invertir_matriz,
     invertir_matriz_con_pasos
 )
@@ -293,6 +295,24 @@ class Controlador:
                 resultado = multiplicar_matriz_escalar(A, escalar)
                 titulo = f"{formatear_fraccion(escalar)}A"
                 texto = f"RESULTADO: {titulo}\n\n" + self.formatear_matriz_resultado(resultado)
+
+            elif operacion in ("determinante_sarrus", "determinante_cofactores"):
+                A = self.leer_matriz(self.vista.mat_entries_a)
+                if operacion == "determinante_sarrus":
+                    resultado, pasos = determinante_sarrus(A)
+                    metodo = "REGLA DE SARRUS"
+                else:
+                    resultado, pasos = determinante_cofactores(A)
+                    metodo = "EXPANSIÓN POR COFACTORES"
+                separador = "=" * 58
+                texto = f"DETERMINANTE DE A  |  {metodo}\n{separador}\n"
+                texto += f"MATRIZ A ({len(A)}×{len(A[0])}):\n"
+                texto += self.formatear_matriz_resultado(A)
+                texto += f"\nDESARROLLO PASO A PASO\n{'-' * 58}\n"
+                texto += "\n".join(pasos)
+                texto += f"\n\n{separador}\n"
+                texto += f"RESULTADO FINAL:  det(A) = {formatear_fraccion(resultado)}\n"
+                texto += separador + "\n"
 
             elif operacion == "inversa_a":
                 filas_a = len(self.vista.mat_entries_a)
