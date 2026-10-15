@@ -864,29 +864,35 @@ class VentanaPrincipal:
 
         # Controles de operación
         _, ops = self._bloque(tm, "OPERACIONES", fill=tk.X, pady=(0, 6))
-        ctrl = tk.Frame(ops, bg=C_SECTION)
-        ctrl.pack(fill=tk.X)
+
+        # Fila 1: Operaciones básicas y Escalar
+        ctrl1 = tk.Frame(ops, bg=C_SECTION)
+        ctrl1.pack(fill=tk.X, pady=(0, 6))
 
         for txt, op in [("A + B", "suma"), ("A − B", "resta"), ("A × B", "multiplicacion")]:
-            ttk.Button(ctrl, text=txt, style="P.TButton",
+            ttk.Button(ctrl1, text=txt, style="P.TButton",
                        command=lambda o=op: self.controlador.operar_matrices(o)).pack(side=tk.LEFT, padx=(0, 6))
 
-        tk.Label(ctrl, text="  ESCALAR c:", font=F_LABEL, bg=C_SECTION, fg=C_WHITE).pack(side=tk.LEFT, padx=(8, 4))
-        self.entrada_escalar_mat = self._entry(ctrl, width=6)
+        tk.Label(ctrl1, text="  ESCALAR c:", font=F_LABEL, bg=C_SECTION, fg=C_WHITE).pack(side=tk.LEFT, padx=(8, 4))
+        self.entrada_escalar_mat = self._entry(ctrl1, width=6)
         self.entrada_escalar_mat.insert(0, "2")
         self.entrada_escalar_mat.pack(side=tk.LEFT, padx=(0, 6))
-        ttk.Button(ctrl, text="c × A", style="S.TButton",
+        ttk.Button(ctrl1, text="c × A", style="S.TButton",
                    command=lambda: self.controlador.operar_matrices("escalar")).pack(side=tk.LEFT, padx=(0, 10))
 
-        ttk.Button(ctrl, text="A⁻¹ (INVERSA A)", style="P.TButton",
-                   command=lambda: self.controlador.operar_matrices("inversa_a")).pack(side=tk.LEFT, padx=(0, 6))
-        ttk.Button(ctrl, text="B⁻¹ (INVERSA B)", style="S.TButton",
-                   command=lambda: self.controlador.operar_matrices("inversa_b")).pack(side=tk.LEFT)
+        # Fila 2: Inversa y Determinantes
+        ctrl2 = tk.Frame(ops, bg=C_SECTION)
+        ctrl2.pack(fill=tk.X)
 
-        ttk.Button(ctrl, text="det(A) SARRUS", style="P.TButton",
-               command=lambda: self.controlador.operar_matrices("determinante_sarrus")).pack(side=tk.LEFT, padx=(6, 0))
-        ttk.Button(ctrl, text="det(A) COFACTORES", style="S.TButton",
-               command=lambda: self.controlador.operar_matrices("determinante_cofactores")).pack(side=tk.LEFT, padx=(6, 0))
+        ttk.Button(ctrl2, text="A⁻¹ (INVERSA A)", style="P.TButton",
+                   command=lambda: self.controlador.operar_matrices("inversa_a")).pack(side=tk.LEFT, padx=(0, 6))
+        ttk.Button(ctrl2, text="B⁻¹ (INVERSA B)", style="S.TButton",
+                   command=lambda: self.controlador.operar_matrices("inversa_b")).pack(side=tk.LEFT, padx=(0, 12))
+
+        ttk.Button(ctrl2, text="det(A) SARRUS", style="P.TButton",
+                   command=lambda: self.controlador.operar_matrices("determinante_sarrus")).pack(side=tk.LEFT, padx=(0, 6))
+        ttk.Button(ctrl2, text="det(A) COFACTORES", style="S.TButton",
+                   command=lambda: self.controlador.operar_matrices("determinante_cofactores")).pack(side=tk.LEFT)
 
         wrap_m, res_m = self._bloque(tm, "RESULTADO", fill=tk.BOTH, expand=True)
         frame_txt_m = tk.Frame(res_m, bg=C_SECTION)
