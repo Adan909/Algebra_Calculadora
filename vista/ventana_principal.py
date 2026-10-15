@@ -615,8 +615,8 @@ class VentanaPrincipal:
         self._lbl(row2, "ALGORITMO :").pack(side=tk.LEFT, padx=(0, 4))
         self.metodo = tk.StringVar(value="Gauss")
         self.selector_metodo = ttk.Combobox(row2, textvariable=self.metodo,
-                                             values=("Gauss", "Gauss-Jordan"),
-                                             state="readonly", width=15)
+                                             values=("Gauss", "Gauss-Jordan", "Factorización LU"),
+                                             state="readonly", width=18)
         self.selector_metodo.pack(side=tk.LEFT, padx=(0, 0))
 
         # Bloque: Ejemplos precargados
@@ -626,6 +626,7 @@ class VentanaPrincipal:
 
         for label, tipo, color in [
             ("SOLUCION UNICA",      "unica",        C_OK),
+            ("FACTORIZACIÓN LU",    "lu",           C_GLOW),
             ("INFINITAS SOLUCIONES","infinitas",    C_CAUTION),
             ("INCONSISTENTE",       "inconsistente", C_WARN),
             ("INVERSA DE MATRIZ",   "inversa",      C_NEON),
@@ -827,7 +828,7 @@ class VentanaPrincipal:
         # ── Sub-tab: Álgebra Matricial ────────────────────────────────────────
         tm = ttk.Frame(self.nb_vectorial, padding="12")
         self.tab_sub_matrices = tm
-        self.nb_vectorial.add(tm, text="  ALGEBRA MATRICIAL  ( A+B, A-B, A×B, A⁻¹ )  ")
+        self.nb_vectorial.add(tm, text="  ALGEBRA MATRICIAL  ( A+B, A-B, A×B, A⁻¹, LU )  ")
 
         _, cfg_m = self._bloque(tm, "DIMENSIONES DE MATRICES", fill=tk.X, pady=(0, 8))
 
@@ -848,11 +849,13 @@ class VentanaPrincipal:
         # Fila de ejemplos precargados para matrices
         row_ej = tk.Frame(cfg_m, bg=C_SECTION)
         row_ej.pack(fill=tk.X, pady=(8, 0))
-        tk.Label(row_ej, text="EJEMPLOS INVERSA:", font=F_LABEL, bg=C_SECTION, fg=C_GLOW).pack(side=tk.LEFT, padx=(0, 8))
+        tk.Label(row_ej, text="EJEMPLOS:", font=F_LABEL, bg=C_SECTION, fg=C_GLOW).pack(side=tk.LEFT, padx=(0, 8))
         for lbl, tipo in [
-            ("EJEMPLO 2×2", "inv_2x2"),
-            ("EJEMPLO 3×3", "inv_3x3"),
-            ("MATRIZ SINGULAR (NO INVERTIBLE)", "inv_singular"),
+            ("INV 2×2", "inv_2x2"),
+            ("INV 3×3", "inv_3x3"),
+            ("SINGULAR", "inv_singular"),
+            ("LU (A = LU)", "lu_3x3"),
+            ("LU (PA = LU)", "lu_pivoteo"),
         ]:
             ttk.Button(row_ej, text=lbl, style="S.TButton",
                        command=lambda t=tipo: self.controlador.cargar_ejemplo_matrices(t)).pack(side=tk.LEFT, padx=(0, 6))
@@ -880,14 +883,19 @@ class VentanaPrincipal:
         ttk.Button(ctrl1, text="c × A", style="S.TButton",
                    command=lambda: self.controlador.operar_matrices("escalar")).pack(side=tk.LEFT, padx=(0, 10))
 
-        # Fila 2: Inversa y Determinantes
+        # Fila 2: Inversa, Factorización LU y Determinantes
         ctrl2 = tk.Frame(ops, bg=C_SECTION)
         ctrl2.pack(fill=tk.X)
 
         ttk.Button(ctrl2, text="A⁻¹ (INVERSA A)", style="P.TButton",
                    command=lambda: self.controlador.operar_matrices("inversa_a")).pack(side=tk.LEFT, padx=(0, 6))
         ttk.Button(ctrl2, text="B⁻¹ (INVERSA B)", style="S.TButton",
-                   command=lambda: self.controlador.operar_matrices("inversa_b")).pack(side=tk.LEFT, padx=(0, 12))
+                   command=lambda: self.controlador.operar_matrices("inversa_b")).pack(side=tk.LEFT, padx=(0, 10))
+
+        ttk.Button(ctrl2, text="LU (MATRIZ A)", style="P.TButton",
+                   command=lambda: self.controlador.operar_matrices("lu_a")).pack(side=tk.LEFT, padx=(0, 6))
+        ttk.Button(ctrl2, text="LU (MATRIZ B)", style="S.TButton",
+                   command=lambda: self.controlador.operar_matrices("lu_b")).pack(side=tk.LEFT, padx=(0, 10))
 
         ttk.Button(ctrl2, text="det(A) SARRUS", style="P.TButton",
                    command=lambda: self.controlador.operar_matrices("determinante_sarrus")).pack(side=tk.LEFT, padx=(0, 6))
@@ -906,7 +914,7 @@ class VentanaPrincipal:
         sc_mx.grid(row=1, column=0, sticky="ew")
         frame_txt_m.grid_rowconfigure(0, weight=1)
         frame_txt_m.grid_columnconfigure(0, weight=1)
-        self._conectar_consola_fullscreen(self.txt_res_matrices, "ÁLGEBRA MATRICIAL & MATRIZ INVERSA", wrap_m.bar)
+        self._conectar_consola_fullscreen(self.txt_res_matrices, "ÁLGEBRA MATRICIAL & FACTORIZACIÓN LU / INVERSA", wrap_m.bar)
 
     def construir_vectores(self, n, k):
         for w in self.scroll_vectores.scrollable_frame.winfo_children():

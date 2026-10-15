@@ -386,3 +386,145 @@ def invertir_matriz_con_pasos(A):
     # Extraer la submatriz derecha [n:] que contiene la inversa
     inversa = [[M[i][n + j] for j in range(n)] for i in range(n)]
     return inversa, pasos
+
+
+def factorizacion_lu(A, con_pivoteo_parcial=False):
+    """
+    Calcula la descomposición LU de una matriz cuadrada A usando el método de Doolittle.
+    
+    Retorna:
+        (P, L, U, num_intercambios)
+        donde:
+            P es la matriz de permutación (identidad si no hay intercambios)
+            L es triangular inferior con 1s en la diagonal
+            U es triangular superior
+            num_intercambios es la cantidad de permutaciones de filas realizadas
+    """
+    P, L, U, _, _, num_intercambios = factorizacion_lu_con_pasos(A, con_pivoteo_parcial=con_pivoteo_parcial)
+    return P, L, U, num_intercambios
+
+
+def factorizacion_lu_con_pasos(A, con_pivoteo_parcial=False):
+    """
+    Calcula la descomposición LU de una matriz cuadrada A junto con el registro detallado paso a paso.
+    
+    Procedimiento algebraico:
+    1. Se verifica que A sea cuadrada (n × n).
+    2. Se inicializan:
+       - Matriz U como copia de A.
+       - Matriz L como la identidad de orden n (unos en diagonal, ceros arriba).
+       - Matriz P como la identidad de orden n.
+    3. Para cada columna k (desde 0 hasta n-1):
+       a) Si con_pivoteo_parcial=True, se busca el elemento de mayor magnitud en la columna k (desde la fila k hacia abajo).
+          Si con_pivoteo_parcial=False (estándar Doolittle), se verifica si el pivote U[k][k] es cero; si lo es, se intercambia con la primera fila inferior no nula.
+       b) Si hay intercambio de filas (k con r):
+          - Se intercambian las filas en U.
+          - Se intercambian las filas en P.
+          - Se intercambian las columnas 0..k-1 en L (los multiplicadores ya calculados).
+       c) Para cada fila i > k:
+          - Multiplicador: m_ik = U[i][k] / U[k][k].
+          - Se almacena m_ik en L[i][k].
+          - Operación elemental por fila: f_{i+1} ➔ f_{i+1} - (m_ik) * f_{k+1}.
+          - Se actualiza la fila i de U.
+    4. Determinante de A:
+       det(A) = (-1)^(num_intercambios) * Π(u_ii).
+       
+    Retorna:
+        (P, L, U, pasos, det, num_intercambios)
+    """
+    if len(A) == 0:
+        raise ValueError("La matriz no puede estar vacía.")
+
+    filas = len(A)
+    columnas = len(A[0])
+    if filas != columnas:
+        raise ValueError(
+            f"Para la factorización LU, la matriz debe ser cuadrada (n × n).\n"
+            f"Dimensión actual: {filas} filas × {columnas} columnas."
+        )
+
+    from modelo.matriz import formatear_fraccion, formatear_matriz
+
+    n = filas
+    U = [[Fraction(valor) for valor in fila] for fila in A]
+    L = [[Fraction(1 if i == j else 0) for j in range(n)] for i in range(n)]
+    P = [[Fraction(1 if i == j else 0) for j in range(n)] for i in range(n)]
+
+    pasos = []
+    num_intercambios = 0
+
+    pasos.append("1. Estado inicial de la matriz A:")
+    pasos.append(formatear_matriz(U))
+
+    for k in range(n):
+        pasos.append(f"\n--- Etapa k = {k + 1} (Columna {k + 1}) ---")
+
+        # Verificar necesidad de pivoteo
+        fila_swap = None
+        if con_pivoteo_parcial:
+            fila_max = max(range(k, n), key=lambda r: abs(U[r][k]))
+            if fila_max != k and abs(U[fila_max][k]) > 0:
+                fila_swap = fila_max
+        else:
+            if U[k][k] == 0:
+                for r in range(k + 1, n):
+                    if U[r][k] != 0:
+                        fila_swap = r
+                        break
+
+        if fila_swap is not None:
+            U[k], U[fila_swap] = U[fila_swap], U[k]
+            P[k], P[fila_swap] = P[fila_swap], P[k]
+            for c in range(k):
+                L[k][c], L[fila_swap][c] = L[fila_swap][c], L[k][c]
+            num_intercambios += 1
+            pasos.append(
+                f"  [Pivoteo] Se intercambia fila f_{k + 1} ⟷ f_{fila_swap + 1} para obtener pivote no nulo."
+            )
+            pasos.append("  Matriz U tras intercambio:")
+            pasos.append(formatear_matriz(U))
+
+        pivote = U[k][k]
+        if pivote == 0:
+            pasos.append(
+                f"  [Aviso] El pivote en la posición ({k + 1}, {k + 1}) es cero y no hay filas inferiores con elementos no nulos.\n"
+                f"  La matriz es singular (det(A) = 0)."
+            )
+            continue
+
+        pasos.append(f"  Pivote seleccionado: u_{k + 1},{k + 1} = {formatear_fraccion(pivote)}")
+
+        for i in range(k + 1, n):
+            elemento_a_eliminar = U[i][k]
+            if elemento_a_eliminar != 0:
+                m = elemento_a_eliminar / pivote
+                L[i][k] = m
+                for j in range(k, n):
+                    U[i][j] -= m * U[k][j]
+                U[i][k] = Fraction(0)
+
+                signo = "−" if m > 0 else "+"
+                pasos.append(
+                    f"  Multiplicador: m_{i + 1},{k + 1} = ({formatear_fraccion(elemento_a_eliminar)}) / ({formatear_fraccion(pivote)}) = {formatear_fraccion(m)}"
+                )
+                pasos.append(
+                    f"  Operación fila: f_{i + 1} ➔ f_{i + 1} {signo} ({formatear_fraccion(abs(m))}) × f_{k + 1}"
+                )
+            else:
+                pasos.append(
+                    f"  Elemento en posición ({i + 1}, {k + 1}) ya es 0 (multiplicador m_{i + 1},{k + 1} = 0)."
+                )
+
+        pasos.append("  Estado actual de U (triangular superior en progreso):")
+        pasos.append(formatear_matriz(U))
+
+    det = Fraction(-1) ** num_intercambios
+    for i in range(n):
+        det *= U[i][i]
+
+    pasos.append("\n==========================================================")
+    tipo = "A = L · U" if num_intercambios == 0 else "P · A = L · U"
+    pasos.append(f"DESCOMPOSICIÓN CONCLUIDA: {tipo}")
+    pasos.append("==========================================================")
+
+    return P, L, U, pasos, det, num_intercambios

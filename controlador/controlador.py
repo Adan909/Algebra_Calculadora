@@ -1,5 +1,5 @@
 from vista.ventana_principal import VentanaPrincipal
-from modelo.solucionador import SolucionadorGauss, SolucionadorGaussJordan
+from modelo.solucionador import SolucionadorGauss, SolucionadorGaussJordan, SolucionadorLU
 
 # Importar funciones de modelo
 from modelo.matriz import formatear_fraccion, formatear_matriz
@@ -17,7 +17,9 @@ from modelo.operaciones_matrices import (
     determinante_sarrus,
     determinante_cofactores,
     invertir_matriz,
-    invertir_matriz_con_pasos
+    invertir_matriz_con_pasos,
+    factorizacion_lu,
+    factorizacion_lu_con_pasos
 )
 from modelo.conversiones import decimal_a_base, base_a_decimal
 from modelo.romanos import (
@@ -58,12 +60,19 @@ class Controlador:
         if tipo == "unica":
             A = [[2, 1, -1], [-3, -1, 2], [-2, 1, 2]]
             b = [8, -11, -3]
+            self.vista.metodo.set("Gauss")
+        elif tipo == "lu":
+            A = [[2, 1, -1], [-3, -1, 2], [-2, 1, 2]]
+            b = [8, -11, -3]
+            self.vista.metodo.set("Factorización LU")
         elif tipo == "infinitas":
             A = [[1, 2, 3], [2, 4, 6], [3, 6, 9]]
             b = [1, 2, 3]
+            self.vista.metodo.set("Gauss")
         elif tipo == "inconsistente":
             A = [[1, 2, 3], [1, 2, 3], [2, 1, 1]]
             b = [4, 5, 1]
+            self.vista.metodo.set("Gauss")
             
         m = len(A)
         n = len(A[0])
@@ -88,6 +97,12 @@ class Controlador:
         elif tipo == "inv_singular":
             A = [[1, 2], [2, 4]]
             B = [[1, 0], [0, 1]]
+        elif tipo == "lu_3x3":
+            A = [[2, 1, 1], [4, 3, 3], [8, 7, 9]]
+            B = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+        elif tipo == "lu_pivoteo":
+            A = [[0, 2, 3], [4, 5, 6], [7, 8, 9]]
+            B = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
         else:
             return
 
@@ -113,8 +128,11 @@ class Controlador:
                 self.vista.mat_entries_b[i][j].delete(0, 'end')
                 self.vista.mat_entries_b[i][j].insert(0, str(B[i][j]))
 
-        # Calcular automáticamente la inversa de A
-        self.operar_matrices("inversa_a")
+        # Ejecutar operación correspondiente según el ejemplo
+        if tipo.startswith("lu_"):
+            self.operar_matrices("lu_a")
+        else:
+            self.operar_matrices("inversa_a")
 
     def resolver_sistema(self):
         try:
@@ -141,6 +159,15 @@ class Controlador:
 
         if self.vista.metodo.get() == "Gauss-Jordan":
             solucionador = SolucionadorGaussJordan(A, b)
+        elif self.vista.metodo.get() == "Factorización LU":
+            if m != n:
+                self.vista.mostrar_error(
+                    "Error de Dimensión",
+                    f"La factorización LU requiere una matriz de coeficientes cuadrada (m = n).\n"
+                    f"Dimensión actual: {m} ecuaciones × {n} incógnitas."
+                )
+                return
+            solucionador = SolucionadorLU(A, b)
         else:
             solucionador = SolucionadorGauss(A, b)
         solucionador.resolver()
@@ -166,9 +193,18 @@ class Controlador:
         self.vista.actualizar_resumen(clasificacion, texto_sol, texto_ver)
         
         texto_historial = ""
-        for paso, (mensaje, matriz) in enumerate(solucionador.historial):
-            texto_historial += f"--- Paso {paso}: {mensaje} ---\n"
-            texto_historial += formatear_matriz(matriz)
+        for paso, item in enumerate(solucionador.historial):
+            if isinstance(item, tuple) and len(item) == 2:
+                mensaje, estado = item
+                texto_historial += f"--- Paso {paso + 1}: {mensaje} ---\n"
+                if isinstance(estado, list) and estado and isinstance(estado[0], list):
+                    texto_historial += formatear_matriz(estado)
+                elif isinstance(estado, str):
+                    texto_historial += estado.rstrip() + "\n"
+                elif isinstance(estado, list) and estado and not isinstance(estado[0], list):
+                    texto_historial += "[ " + ", ".join(formatear_fraccion(v) for v in estado) + " ]\n"
+            elif isinstance(item, str):
+                texto_historial += f"--- Paso {paso + 1} ---\n{item}\n"
             texto_historial += "\n"
             
         self.vista.actualizar_historial(texto_historial)
@@ -391,6 +427,74 @@ class Controlador:
 
                 texto += "----------------------------------------------------------\n"
                 texto += "DESGLOSE DE OPERACIONES ELEMENTALES POR FILA (GAUSS-JORDAN):\n"
+                texto += "----------------------------------------------------------\n"
+                texto += "\n".join(pasos) + "\n"
+
+            elif operacion in ("lu_a", "lu_b"):
+                es_a = (operacion == "lu_a")
+                entradas = self.vista.mat_entries_a if es_a else self.vista.mat_entries_b
+                nombre_mat = "Matriz A" if es_a else "Matriz B"
+                letra_mat = "A" if es_a else "B"
+                filas = len(entradas)
+                columnas = len(entradas[0]) if filas > 0 else 0
+                if filas == 0 or columnas == 0 or filas != columnas:
+                    self.vista.mostrar_error(
+                        "Error de Dimensión",
+                        f"Para la factorización LU, la matriz debe ser cuadrada (n × n).\n"
+                        f"Dimensión actual de la {nombre_mat}: {filas} fila(s) × {columnas} columna(s)."
+                    )
+                    return
+
+                M = self.leer_matriz(entradas)
+                try:
+                    self.vista.root.config(cursor="watch")
+                    self.vista.root.update_idletasks()
+                    P, L, U, pasos, det, num_swaps = factorizacion_lu_con_pasos(M)
+                finally:
+                    self.vista.root.config(cursor="")
+
+                tipo_rel = f"{letra_mat} = L · U" if num_swaps == 0 else f"P · {letra_mat} = L · U"
+                separador = "=" * 60
+
+                texto = f"{separador}\n"
+                texto += f"FACTORIZACIÓN LU (MÉTODO DE DOOLITTLE) — {nombre_mat.upper()}\n"
+                texto += f"RELACIÓN FUNDAMENTAL: {tipo_rel}\n"
+                texto += f"{separador}\n\n"
+
+                texto += f"{nombre_mat.upper()} ORIGINAL ({filas}×{columnas}):\n"
+                texto += self.formatear_matriz_resultado(M) + "\n"
+
+                if num_swaps > 0:
+                    texto += f"MATRIZ DE PERMUTACIÓN P ({num_swaps} intercambio(s) de fila):\n"
+                    texto += self.formatear_matriz_resultado(P) + "\n"
+                else:
+                    texto += "MATRIZ DE PERMUTACIÓN P:\n[ P = Matriz Identidad I, no se requirió intercambio de filas ]\n\n"
+
+                texto += "MATRIZ TRIANGULAR INFERIOR L (unos en la diagonal principal):\n"
+                texto += self.formatear_matriz_resultado(L) + "\n"
+
+                texto += "MATRIZ TRIANGULAR SUPERIOR U (pivotes en la diagonal):\n"
+                texto += self.formatear_matriz_resultado(U) + "\n"
+
+                # Comprobación de la factorización
+                LU_prod = multiplicar_matrices(L, U)
+                PM_prod = multiplicar_matrices(P, M)
+                texto += "----------------------------------------------------------\n"
+                texto += f"COMPROBACIÓN DEL PRODUCTO ( L × U  vs  {'P × ' + letra_mat if num_swaps > 0 else letra_mat} ):\n"
+                texto += "----------------------------------------------------------\n"
+                texto += "  L × U =\n"
+                texto += self.formatear_matriz_resultado(LU_prod)
+                if num_swaps > 0:
+                    texto += f"  P × {letra_mat} =\n"
+                    texto += self.formatear_matriz_resultado(PM_prod)
+                es_igual = (LU_prod == PM_prod)
+                texto += f"  Estado: {'✔ FACTORIZACIÓN EXACTA Y COMPROBADA' if es_igual else '✘ DISCREPANCIA'}\n\n"
+
+                texto += f"DETERMINANTE DERIVADO DE U:\n"
+                texto += f"  det({letra_mat}) = (-1)^{num_swaps} × Π(u_ii) = {formatear_fraccion(det)}\n\n"
+
+                texto += "----------------------------------------------------------\n"
+                texto += "DESGLOSE Y REGISTRO PASO A PASO:\n"
                 texto += "----------------------------------------------------------\n"
                 texto += "\n".join(pasos) + "\n"
             else:
