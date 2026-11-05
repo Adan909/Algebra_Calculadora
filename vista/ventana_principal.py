@@ -316,6 +316,7 @@ class VentanaPrincipal:
             estado["bis_max"] = self.biseccion_max_iter.get() if hasattr(self, "biseccion_max_iter") else ""
             estado["bis_res"] = getattr(self, "_resultado_biseccion", None)
             estado["bis_func_obj"] = getattr(self, "_funcion_grafica_biseccion", None)
+            estado["bis_zoom"] = getattr(self, "_zoom_biseccion", 1.0)
         except Exception:
             pass
         return estado
@@ -445,6 +446,8 @@ class VentanaPrincipal:
             self.biseccion_max_iter.insert(0, estado.get("bis_max", ""))
             if estado.get("bis_res") and estado.get("bis_func_obj"):
                 self.mostrar_resultado_biseccion(estado["bis_res"], estado["bis_func_obj"])
+                self._zoom_biseccion = estado.get("bis_zoom", 1.0)
+                self._dibujar_grafica_biseccion()
 
             # Seleccionar pestaña principal
             tab_idx = estado.get("tab_idx", 0)
@@ -1619,15 +1622,20 @@ class VentanaPrincipal:
         work = tk.Frame(parent, bg=BG_WINDOW)
         work.pack(fill=tk.BOTH, expand=True, pady=(0, 8))
 
-        t_graf = Tarjeta(work, titulo="Gráfica Interactiva", subtitulo="Comportamiento de f(x) y subintervalo actual")
+        t_graf = Tarjeta(work, titulo="Gráfica Interactiva", subtitulo="Comportamiento de f(x) y subintervalo · Rueda del ratón para zoom")
         t_graf.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 6))
 
         self.biseccion_canvas = tk.Canvas(t_graf.contenido, height=220, bg=BG_CARD, highlightthickness=0, bd=0)
         self.biseccion_canvas.pack(fill=tk.BOTH, expand=True)
         self.biseccion_canvas.bind("<Configure>", lambda _event: self._dibujar_grafica_biseccion())
+        self.biseccion_canvas.bind("<MouseWheel>", self._zoom_grafica_biseccion)
+        self.biseccion_canvas.bind("<Button-4>", self._zoom_grafica_biseccion)
+        self.biseccion_canvas.bind("<Button-5>", self._zoom_grafica_biseccion)
+        self.biseccion_canvas.bind("<Double-Button-1>", self._reset_zoom_biseccion)
         self._funcion_grafica_biseccion = None
         self._resultado_biseccion = None
         self._iteracion_seleccionada = None
+        self._zoom_biseccion = 1.0
 
         t_exp = Tarjeta(work, titulo="Lectura del Procedimiento", subtitulo="Detalle paso a paso del intervalo")
         t_exp.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(6, 0))
@@ -1690,6 +1698,7 @@ class VentanaPrincipal:
     def mostrar_resultado_biseccion(self, resultado, funcion):
         self._resultado_biseccion = resultado
         self._funcion_grafica_biseccion = funcion
+        self._zoom_biseccion = 1.0
         self.biseccion_raiz.config(text=f"{resultado.raiz:.10g}")
         self.biseccion_error_final.config(
             text="—" if resultado.error_final is None else f"{resultado.error_final:.6g} %"
@@ -1757,6 +1766,29 @@ class VentanaPrincipal:
         self.biseccion_explicacion.config(text=texto)
         self._iteracion_seleccionada = fila
 
+    def _zoom_grafica_biseccion(self, event):
+        """
+        Aumenta o disminuye la escala de la gráfica de bisección con la rueda del ratón.
+        """
+        if event.num == 4 or (hasattr(event, "delta") and event.delta > 0):
+            factor = 1.2
+        elif event.num == 5 or (hasattr(event, "delta") and event.delta < 0):
+            factor = 1.0 / 1.2
+        else:
+            return "break"
+
+        nuevo_zoom = getattr(self, "_zoom_biseccion", 1.0) * factor
+        if 0.001 <= nuevo_zoom <= 1000.0:
+            self._zoom_biseccion = nuevo_zoom
+            self._dibujar_grafica_biseccion()
+        return "break"
+
+    def _reset_zoom_biseccion(self, _event=None):
+        """Restablece el factor de zoom de la gráfica de bisección a su valor predeterminado (1.0)."""
+        self._zoom_biseccion = 1.0
+        self._dibujar_grafica_biseccion()
+        return "break"
+
     def _dibujar_grafica_biseccion(self):
         canvas = getattr(self, "biseccion_canvas", None)
         if canvas is None:
@@ -1775,8 +1807,11 @@ class VentanaPrincipal:
         else:
             xmin, xmax = -2.0, 2.0
         span = xmax - xmin or 1.0
-        xmin -= span * 0.35
-        xmax += span * 0.35
+        zoom = getattr(self, "_zoom_biseccion", 1.0)
+        centro = (xmin + xmax) / 2.0
+        span_total = (span * 1.7) / zoom
+        xmin = centro - span_total / 2.0
+        xmax = centro + span_total / 2.0
 
         function = self._funcion_grafica_biseccion
         points = []
@@ -1790,7 +1825,7 @@ class VentanaPrincipal:
                         points.append(None)
                     else:
                         points.append((x, y))
-                except ValueError:
+                except (ValueError, ZeroDivisionError, OverflowError):
                     points.append(None)
         values = [point[1] for point in points if point is not None]
         if selected:
@@ -1825,6 +1860,8 @@ class VentanaPrincipal:
             else:
                 segment.append(point)
         canvas.create_text(right - 4, top + 8, text="f(x)", fill=ACCENT_PRIMARY, font=FONT_SMALL_BOLD, anchor="e")
+        if abs(zoom - 1.0) > 1e-4:
+            canvas.create_text(left + 6, top + 8, text=f"Escala: {zoom:.2g}x", fill=TEXT_MUTED, font=FONT_MICRO, anchor="w")
 
         if selected:
             for x, label, color in ((selected.a, "a", WARNING_TEXT), (selected.b, "b", WARNING_TEXT),
@@ -1850,6 +1887,7 @@ class VentanaPrincipal:
         self._resultado_biseccion = None
         self._funcion_grafica_biseccion = None
         self._iteracion_seleccionada = None
+        self._zoom_biseccion = 1.0
         self.biseccion_selector["values"] = ()
         self.biseccion_selector.set("")
         for item in self.biseccion_tabla.get_children():
