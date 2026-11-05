@@ -1,5 +1,6 @@
 from vista.ventana_principal import VentanaPrincipal
 from modelo.solucionador import SolucionadorGauss, SolucionadorGaussJordan, SolucionadorLU
+from modelo.biseccion import FuncionMatematica, biseccion
 
 # Importar funciones de modelo
 from modelo.matriz import formatear_fraccion, formatear_matriz
@@ -32,6 +33,43 @@ from modelo.romanos import (
 class Controlador:
     def __init__(self, root):
         self.vista = VentanaPrincipal(root, self)
+
+    # ==========================================================
+    # MÉTODO DE BISECCIÓN
+    # ==========================================================
+    def calcular_biseccion(self):
+        try:
+            # El modelo interpreta la función y valida parámetros antes de producir resultados.
+            expresion = FuncionMatematica(self.vista.biseccion_funcion.get())
+            resultado = biseccion(
+                expresion,
+                self.vista.biseccion_a.get().strip(),
+                self.vista.biseccion_b.get().strip(),
+                self.vista.biseccion_error.get().strip(),
+                self.vista.biseccion_max_iter.get().strip(),
+            )
+        except (ValueError, OverflowError) as error:
+            # Los errores de entrada vuelven a la vista sin interrumpir el ciclo de Tkinter.
+            self.vista.mostrar_error("Entrada no válida", str(error))
+            return
+        self.vista.mostrar_resultado_biseccion(resultado, expresion)
+
+    def cargar_ejemplo_biseccion(self):
+        # Mantiene el ejemplo como datos de entrada: la tabla siempre se calcula con el algoritmo.
+        valores = (
+            (self.vista.biseccion_funcion, "x^4 - 5*x^3 + 0.5*x^2 - 11*x + 10"),
+            (self.vista.biseccion_a, "0.55"),
+            (self.vista.biseccion_b, "1.1"),
+            (self.vista.biseccion_error, "1"),
+            (self.vista.biseccion_max_iter, "100"),
+        )
+        for entrada, valor in valores:
+            entrada.delete(0, "end")
+            entrada.insert(0, valor)
+        self.calcular_biseccion()
+
+    def limpiar_biseccion(self):
+        self.vista.limpiar_biseccion()
 
     # ==========================================================
     # SISTEMAS DE ECUACIONES (GAUSS)

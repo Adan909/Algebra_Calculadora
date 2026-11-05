@@ -224,16 +224,19 @@ class VentanaPrincipal:
         self.tab_vectorial = ttk.Frame(self.nb_main, style="TFrame", padding="14")
         self.tab_conv      = ttk.Frame(self.nb_main, style="TFrame", padding="14")
         self.tab_romanos   = ttk.Frame(self.nb_main, style="TFrame", padding="14")
+        self.tab_biseccion = ttk.Frame(self.nb_main, style="TFrame", padding="14")
 
         self.nb_main.add(self.tab_gauss,     text="  GAUSS-JORDAN  ")
         self.nb_main.add(self.tab_vectorial, text="  VECTORIAL & MATRICES  ")
         self.nb_main.add(self.tab_conv,      text="  CONVERSION DE BASES  ")
         self.nb_main.add(self.tab_romanos,   text="  NUMEROS ROMANOS  ")
+        self.nb_main.add(self.tab_biseccion, text="  METODO DE BISECCION  ")
 
         self._build_gauss()
         self._build_vectorial()
         self._build_conv()
         self._build_romanos()
+        self._build_biseccion()
 
     # ==========================================================================
     # HELPERS
@@ -1046,6 +1049,297 @@ class VentanaPrincipal:
 
     def mostrar_resultado_conversion(self, t):
         self._write(self.txt_resultados_conv, t); self._ops()
+
+    # ======================================================================
+    # MÓDULO 5 — MÉTODO DE BISECCIÓN
+    # ======================================================================
+    def _build_biseccion(self):
+        parent = self.tab_biseccion
+        _, cfg = self._bloque(parent, "METODO DE BISECCION · TEOREMA DEL VALOR INTERMEDIO",
+                              fill=tk.X, pady=(0, 8))
+
+        fields = tk.Frame(cfg, bg=C_SECTION)
+        fields.pack(fill=tk.X)
+        specs = (
+            ("FUNCION f(x)", "biseccion_funcion", "x^4 - 5*x^3 + 0.5*x^2 - 11*x + 10", 36),
+            ("EXTREMO a", "biseccion_a", "0.55", 10),
+            ("EXTREMO b", "biseccion_b", "1.1", 10),
+            ("ERROR PERMITIDO (%)", "biseccion_error", "1", 10),
+            ("MAX. ITERACIONES", "biseccion_max_iter", "100", 10),
+        )
+        # Cada campo declara etiqueta, atributo del controlador, valor inicial y ancho.
+        for columna, (label, atributo, inicial, ancho) in enumerate(specs):
+            cell = tk.Frame(fields, bg=C_SECTION)
+            cell.grid(row=0, column=columna, sticky="ew", padx=(0, 10), pady=(0, 8))
+            tk.Label(cell, text=label, font=F_SMALL, bg=C_SECTION, fg=C_MUTED).pack(anchor="w", pady=(0, 4))
+            if atributo == "biseccion_max_iter":
+                entry = ttk.Spinbox(cell, from_=1, to=100000, width=ancho)
+                entry.set(inicial)
+            else:
+                entry = self._entry(cell, width=ancho)
+                entry.insert(0, inicial)
+            entry.pack(fill=tk.X)
+            setattr(self, atributo, entry)
+            fields.grid_columnconfigure(columna, weight=3 if columna == 0 else 1)
+
+        actions = tk.Frame(cfg, bg=C_SECTION)
+        actions.pack(fill=tk.X)
+        ttk.Button(actions, text="CALCULAR RAIZ", style="P.TButton",
+                   command=self.controlador.calcular_biseccion).pack(side=tk.LEFT, padx=(0, 6))
+        ttk.Button(actions, text="LIMPIAR", style="S.TButton",
+                   command=self.controlador.limpiar_biseccion).pack(side=tk.LEFT, padx=6)
+        ttk.Button(actions, text="EJEMPLO DEL PROFESOR", style="S.TButton",
+                   command=self.controlador.cargar_ejemplo_biseccion).pack(side=tk.LEFT, padx=6)
+        tk.Label(actions, text="Potencias: ^ o **    Funciones: sin, cos, tan, sqrt, log, exp",
+                 font=F_SMALL, bg=C_SECTION, fg=C_MUTED).pack(side=tk.RIGHT, padx=4)
+
+        summary = tk.Frame(parent, bg=C_PANEL)
+        summary.pack(fill=tk.X, pady=(0, 8))
+        self.biseccion_raiz = self._biseccion_metric(summary, "RAIZ APROXIMADA", "—", C_NEON)
+        self.biseccion_error_final = self._biseccion_metric(summary, "ERROR RELATIVO FINAL", "—", C_WHITE)
+        self.biseccion_iteraciones_total = self._biseccion_metric(summary, "ITERACIONES", "—", C_WHITE)
+        self.biseccion_estado = self._biseccion_metric(summary, "ESTADO", "Esperando datos", C_MUTED)
+
+        work = tk.Frame(parent, bg=C_PANEL)
+        work.pack(fill=tk.BOTH, expand=True, pady=(0, 8))
+        _, plot_wrap = self._bloque(work, "GRAFICA INTERACTIVA · f(x) Y SUBINTERVALO ACTUAL",
+                                    side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 6))
+        self.biseccion_canvas = tk.Canvas(plot_wrap, height=245, bg=C_INPUT,
+                                          highlightthickness=0, bd=0)
+        self.biseccion_canvas.pack(fill=tk.BOTH, expand=True)
+        self.biseccion_canvas.bind("<Configure>", lambda _event: self._dibujar_grafica_biseccion())
+        self._funcion_grafica_biseccion = None
+        self._resultado_biseccion = None
+        self._iteracion_seleccionada = None
+
+        _, explain = self._bloque(work, "LECTURA DEL PROCEDIMIENTO",
+                                  color_acento=C_GLOW, side=tk.RIGHT, fill=tk.BOTH,
+                                  expand=True, padx=(6, 0))
+        self.biseccion_selector = ttk.Combobox(explain, state="readonly", width=24)
+        self.biseccion_selector.pack(anchor="w", pady=(0, 8))
+        self.biseccion_selector.bind("<<ComboboxSelected>>", self._seleccionar_iteracion_biseccion)
+        self.biseccion_explicacion = tk.Label(
+            explain, text="Carga el ejemplo o ingresa una función continua y un intervalo con cambio de signo.",
+            font=F_MONO, bg=C_SECTION, fg=C_SILVER, justify=tk.LEFT, anchor="nw", wraplength=380
+        )
+        self.biseccion_explicacion.pack(fill=tk.BOTH, expand=True, anchor="nw")
+
+        _, table = self._bloque(parent, "TABLA DE ITERACIONES", fill=tk.BOTH, expand=True)
+        # El mismo identificador de fila sincroniza la tabla con el selector de explicación.
+        columns = ("i", "a", "b", "c", "fa", "fc", "signo", "error")
+        table_frame = tk.Frame(table, bg=C_SECTION)
+        table_frame.pack(fill=tk.BOTH, expand=True)
+        table_frame.grid_rowconfigure(0, weight=1)
+        table_frame.grid_columnconfigure(0, weight=1)
+        self.biseccion_tabla = ttk.Treeview(table_frame, columns=columns, show="headings", height=8,
+                                            selectmode="browse")
+        headings = {
+            "i": ("i", 45), "a": ("a", 100), "b": ("b", 100),
+            "c": ("c (Punto Medio)", 130), "fa": ("f(a)", 105),
+            "fc": ("f(c)", 105), "signo": ("f(a)·f(c)", 95), "error": ("Ea (%)", 100),
+        }
+        for columna, (titulo, ancho) in headings.items():
+            self.biseccion_tabla.heading(columna, text=titulo)
+            self.biseccion_tabla.column(columna, width=ancho, minwidth=ancho, anchor=tk.CENTER,
+                                        stretch=columna in ("a", "b", "c", "fa", "fc"))
+        self.biseccion_tabla.tag_configure("ultima", background="#0b3150", foreground=C_NEON)
+        self.biseccion_tabla.grid(row=0, column=0, sticky="nsew")
+        scroll_y = ttk.Scrollbar(table_frame, orient="vertical", command=self.biseccion_tabla.yview)
+        scroll_x = ttk.Scrollbar(table_frame, orient="horizontal", command=self.biseccion_tabla.xview)
+        self.biseccion_tabla.configure(yscrollcommand=scroll_y.set, xscrollcommand=scroll_x.set)
+        scroll_y.grid(row=0, column=1, sticky="ns")
+        scroll_x.grid(row=1, column=0, sticky="ew")
+        self.biseccion_tabla.bind("<<TreeviewSelect>>", self._seleccionar_fila_biseccion)
+        self.biseccion_canvas.bind("<Button-1>", lambda _event: self.biseccion_canvas.focus_set())
+        self._dibujar_grafica_biseccion()
+
+    def _biseccion_metric(self, parent, titulo, valor, color):
+        block = tk.Frame(parent, bg=C_SECTION, highlightthickness=1, highlightbackground=C_BORDER)
+        block.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 6))
+        tk.Label(block, text=titulo, font=F_SMALL, bg=C_SECTION, fg=C_MUTED).pack(anchor="w", padx=10, pady=(7, 2))
+        label = tk.Label(block, text=valor, font=F_MONO_LG, bg=C_SECTION, fg=color, anchor="w")
+        label.pack(fill=tk.X, padx=10, pady=(0, 7))
+        return label
+
+    @staticmethod
+    def _numero_biseccion(valor, digitos=8):
+        return "—" if valor is None else f"{valor:.{digitos}g}"
+
+    def mostrar_resultado_biseccion(self, resultado, funcion):
+        # El modelo conserva precisión completa; solo se redondean los textos presentados.
+        self._resultado_biseccion = resultado
+        self._funcion_grafica_biseccion = funcion
+        self.biseccion_raiz.config(text=f"{resultado.raiz:.10g}")
+        self.biseccion_error_final.config(
+            text="—" if resultado.error_final is None else f"{resultado.error_final:.6g} %"
+        )
+        self.biseccion_iteraciones_total.config(text=str(len(resultado.iteraciones)))
+        self.biseccion_estado.config(
+            text="CONVERGIO" if resultado.convergio else "LIMITE ALCANZADO",
+            fg=C_OK if resultado.convergio else C_CAUTION,
+        )
+        for item in self.biseccion_tabla.get_children():
+            self.biseccion_tabla.delete(item)
+        for indice, fila in enumerate(resultado.iteraciones):
+            self.biseccion_tabla.insert("", tk.END, iid=str(indice), values=(
+                fila.numero, self._numero_biseccion(fila.a), self._numero_biseccion(fila.b),
+                self._numero_biseccion(fila.c), self._numero_biseccion(fila.fa),
+                self._numero_biseccion(fila.fc), fila.signo_producto,
+                "—" if fila.error_relativo is None else f"{fila.error_relativo:.6g}",
+            ), tags=("ultima",) if indice == len(resultado.iteraciones) - 1 else ())
+        self.biseccion_selector["values"] = tuple(
+            f"Iteración {fila.numero}" for fila in resultado.iteraciones
+        )
+        if resultado.iteraciones:
+            # Resalta y muestra primero el último paso, sin ocultar las iteraciones anteriores.
+            indice_final = len(resultado.iteraciones) - 1
+            self.biseccion_selector.current(indice_final)
+            self._mostrar_iteracion_biseccion(indice_final)
+            self.biseccion_tabla.selection_set(str(indice_final))
+        else:
+            self.biseccion_selector.set("")
+            self.biseccion_explicacion.config(text=resultado.motivo)
+        self._dibujar_grafica_biseccion()
+        self._ops()
+
+    def _seleccionar_iteracion_biseccion(self, _event=None):
+        # El selector y la tabla comparten índice para mostrar el mismo paso en ambos paneles.
+        indice = self.biseccion_selector.current()
+        if indice >= 0:
+            self._mostrar_iteracion_biseccion(indice)
+            self.biseccion_tabla.selection_set(str(indice))
+            self._dibujar_grafica_biseccion()
+
+    def _seleccionar_fila_biseccion(self, _event=None):
+        seleccion = self.biseccion_tabla.selection()
+        if seleccion:
+            indice = int(seleccion[0])
+            self.biseccion_selector.current(indice)
+            self._mostrar_iteracion_biseccion(indice)
+            self._dibujar_grafica_biseccion()
+
+    def _mostrar_iteracion_biseccion(self, indice):
+        if not self._resultado_biseccion or not self._resultado_biseccion.iteraciones:
+            return
+        fila = self._resultado_biseccion.iteraciones[indice]
+        error = "aún no se calcula (primera iteración)" if fila.error_relativo is None else f"{fila.error_relativo:.6g} %"
+        criterio = ("Error relativo porcentual entre puntos medios consecutivos."
+                    if fila.criterio_error == "error relativo porcentual"
+                    else "Como c = 0, se usa el ancho relativo del intervalo para evitar dividir entre cero.")
+        texto = (
+            f"Intervalo actual: [{fila.a:.10g}, {fila.b:.10g}]\n"
+            f"Punto medio: c = (a + b) / 2 = {fila.c:.10g}\n"
+            f"f(a) = {fila.fa:.8g}    f(c) = {fila.fc:.8g}\n"
+            f"Signo de f(a)·f(c): {fila.signo_producto}\n"
+            f"Extremo que cambia: {fila.extremo_modificado}\n"
+            f"Nuevo intervalo: [{fila.nuevo_a:.10g}, {fila.nuevo_b:.10g}]\n"
+            f"Ea: {error}\n\n{criterio}"
+        )
+        self.biseccion_explicacion.config(text=texto)
+        self._iteracion_seleccionada = fila
+
+    def _dibujar_grafica_biseccion(self):
+        canvas = getattr(self, "biseccion_canvas", None)
+        if canvas is None:
+            return
+        canvas.delete("all")
+        width, height = canvas.winfo_width(), canvas.winfo_height()
+        if width < 80 or height < 80:
+            return
+        left, right, top, bottom = 54, width - 18, 18, height - 38
+        selected = self._iteracion_seleccionada
+        if selected:
+            xmin, xmax = selected.a, selected.b
+        elif self._resultado_biseccion and self._resultado_biseccion.iteraciones:
+            first = self._resultado_biseccion.iteraciones[0]
+            xmin, xmax = first.a, first.b
+        else:
+            xmin, xmax = -2.0, 2.0
+        span = xmax - xmin or 1.0
+        xmin -= span * 0.35
+        xmax += span * 0.35
+
+        function = self._funcion_grafica_biseccion
+        points = []
+        if function:
+            # Los puntos indefinidos separan la curva para no dibujar líneas a través de singularidades.
+            samples = 240
+            for index in range(samples + 1):
+                x = xmin + (xmax - xmin) * index / samples
+                try:
+                    y = function.evaluar(x)
+                    if abs(y) > 1e8:
+                        points.append(None)
+                    else:
+                        points.append((x, y))
+                except ValueError:
+                    points.append(None)
+        values = [point[1] for point in points if point is not None]
+        if selected:
+            values.extend((selected.fa, selected.fc))
+        ymin, ymax = (min(values), max(values)) if values else (-1.0, 1.0)
+        if ymin == ymax:
+            ymin, ymax = ymin - 1, ymax + 1
+        padding = (ymax - ymin) * 0.12
+        ymin, ymax = ymin - padding, ymax + padding
+        to_x = lambda x: left + (x - xmin) / (xmax - xmin) * (right - left)
+        to_y = lambda y: bottom - (y - ymin) / (ymax - ymin) * (bottom - top)
+
+        for tick in range(5):
+            x = xmin + (xmax - xmin) * tick / 4
+            y = ymin + (ymax - ymin) * tick / 4
+            canvas.create_line(to_x(x), top, to_x(x), bottom, fill=C_BORDER)
+            canvas.create_line(left, to_y(y), right, to_y(y), fill=C_BORDER)
+            canvas.create_text(to_x(x), bottom + 15, text=f"{x:.4g}", fill=C_MUTED, font=F_SMALL)
+            canvas.create_text(left - 8, to_y(y), text=f"{y:.4g}", fill=C_MUTED, font=F_SMALL, anchor="e")
+        if ymin <= 0 <= ymax:
+            canvas.create_line(left, to_y(0), right, to_y(0), fill=C_SILVER, width=1)
+        canvas.create_line(left, top, left, bottom, fill=C_SILVER)
+        canvas.create_line(left, bottom, right, bottom, fill=C_SILVER)
+
+        segment = []
+        for point in points + [None]:
+            if point is None:
+                if len(segment) > 1:
+                    coords = [coordinate for x, y in segment for coordinate in (to_x(x), to_y(y))]
+                    canvas.create_line(*coords, fill=C_NEON, width=2, smooth=True)
+                segment = []
+            else:
+                segment.append(point)
+        canvas.create_text(right - 4, top + 8, text="f(x)", fill=C_NEON, font=F_LABEL, anchor="e")
+
+        if selected:
+            # Las líneas verticales ubican los extremos actuales y el punto medio seleccionado.
+            for x, label, color in ((selected.a, "a", C_CAUTION), (selected.b, "b", C_CAUTION),
+                                    (selected.c, "c", C_OK)):
+                canvas.create_line(to_x(x), top, to_x(x), bottom, fill=color, dash=(3, 3))
+                try:
+                    y = function.evaluar(x)
+                    canvas.create_oval(to_x(x)-4, to_y(y)-4, to_x(x)+4, to_y(y)+4,
+                                       fill=color, outline=C_ROOT, width=1)
+                except (ValueError, TypeError):
+                    pass
+                canvas.create_text(to_x(x), bottom + 27, text=label, fill=color, font=F_LABEL)
+
+    def limpiar_biseccion(self):
+        # Restablece entradas, métricas, selección y datos de dibujo para un cálculo nuevo.
+        for atributo in ("biseccion_funcion", "biseccion_a", "biseccion_b",
+                         "biseccion_error", "biseccion_max_iter"):
+            entry = getattr(self, atributo)
+            entry.delete(0, tk.END)
+        self.biseccion_raiz.config(text="—")
+        self.biseccion_error_final.config(text="—")
+        self.biseccion_iteraciones_total.config(text="—")
+        self.biseccion_estado.config(text="Esperando datos", fg=C_MUTED)
+        self._resultado_biseccion = None
+        self._funcion_grafica_biseccion = None
+        self._iteracion_seleccionada = None
+        self.biseccion_selector["values"] = ()
+        self.biseccion_selector.set("")
+        for item in self.biseccion_tabla.get_children():
+            self.biseccion_tabla.delete(item)
+        self.biseccion_explicacion.config(text="Carga una función e intervalo para comenzar.")
+        self._dibujar_grafica_biseccion()
 
     # ==========================================================================
     # MÓDULO 4 — NUMEROS ROMANOS
