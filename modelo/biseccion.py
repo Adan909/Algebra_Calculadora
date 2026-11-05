@@ -1,13 +1,12 @@
 import ast
 import math
+import operator
 import re
 from dataclasses import dataclass
 
-from simpleeval import SimpleEval
-
 
 class FuncionMatematica:
-    """Evalúa expresiones reales con el intérprete de lista permitida de simpleeval."""
+    """Evalúa expresiones reales limitadas a operaciones matemáticas conocidas."""
 
     # Solo se exponen funciones matemáticas conocidas; no se permite ejecutar código arbitrario.
     FUNCIONES = {
@@ -25,6 +24,18 @@ class FuncionMatematica:
         "tan": math.tan,
     }
 
+    OPERADORES = {
+        ast.Add: operator.add,
+        ast.Sub: operator.sub,
+        ast.Mult: operator.mul,
+        ast.Div: operator.truediv,
+        ast.FloorDiv: operator.floordiv,
+        ast.Mod: operator.mod,
+        ast.Pow: operator.pow,
+        ast.UAdd: operator.pos,
+        ast.USub: operator.neg,
+    }
+
     def __init__(self, expresion):
         expresion = expresion.strip()
         if not expresion or len(expresion) > 200:
@@ -35,21 +46,33 @@ class FuncionMatematica:
         # Acepta la notación habitual de potencias y la traduce al formato del evaluador.
         self.expresion = expresion.replace("^", "**")
         try:
-            ast.parse(self.expresion, mode="eval")
+            self._expresion_parseada = ast.parse(self.expresion, mode="eval").body
         except SyntaxError as error:
             raise ValueError("La expresión matemática tiene una sintaxis inválida.") from error
-        operadores = SimpleEval().operators.copy()
-        operadores[ast.Pow] = self._potencia_limitada
-        self._evaluador = SimpleEval(
-            names={"pi": math.pi, "e": math.e, "x": 0.0},
-            functions=self.FUNCIONES,
-            operators=operadores,
-        )
         try:
-            # El árbol se conserva para reutilizarlo en cada evaluación, incluida la gráfica.
-            self._expresion_parseada = self._evaluador.parse(self.expresion)
+            self._validar(self._expresion_parseada)
         except Exception as error:
             raise ValueError(f"Función inválida: {error}") from error
+
+    @classmethod
+    def _validar(cls, nodo):
+        if isinstance(nodo, ast.Constant):
+            if isinstance(nodo.value, bool) or not isinstance(nodo.value, (int, float)):
+                raise ValueError("Solo se permiten números reales.")
+        elif isinstance(nodo, ast.Name):
+            if nodo.id not in {"x", "pi", "e"}:
+                raise ValueError(f"Nombre no permitido: {nodo.id}.")
+        elif isinstance(nodo, ast.BinOp) and type(nodo.op) in cls.OPERADORES:
+            cls._validar(nodo.left)
+            cls._validar(nodo.right)
+        elif isinstance(nodo, ast.UnaryOp) and type(nodo.op) in cls.OPERADORES:
+            cls._validar(nodo.operand)
+        elif (isinstance(nodo, ast.Call) and isinstance(nodo.func, ast.Name)
+              and nodo.func.id in cls.FUNCIONES and not nodo.keywords):
+            for argumento in nodo.args:
+                cls._validar(argumento)
+        else:
+            raise ValueError("La expresión contiene una operación no permitida.")
 
     @staticmethod
     def _potencia_limitada(base, exponente):
@@ -58,10 +81,28 @@ class FuncionMatematica:
             raise ValueError("El exponente debe tener magnitud igual o menor que 100.")
         return base ** exponente
 
+    @classmethod
+    def _evaluar_nodo(cls, nodo, x):
+        if isinstance(nodo, ast.Constant):
+            return nodo.value
+        if isinstance(nodo, ast.Name):
+            return {"x": x, "pi": math.pi, "e": math.e}[nodo.id]
+        if isinstance(nodo, ast.BinOp):
+            izquierda = cls._evaluar_nodo(nodo.left, x)
+            derecha = cls._evaluar_nodo(nodo.right, x)
+            if isinstance(nodo.op, ast.Pow):
+                return cls._potencia_limitada(izquierda, derecha)
+            return cls.OPERADORES[type(nodo.op)](izquierda, derecha)
+        if isinstance(nodo, ast.UnaryOp):
+            return cls.OPERADORES[type(nodo.op)](cls._evaluar_nodo(nodo.operand, x))
+        if isinstance(nodo, ast.Call):
+            argumentos = [cls._evaluar_nodo(argumento, x) for argumento in nodo.args]
+            return cls.FUNCIONES[nodo.func.id](*argumentos)
+        raise ValueError("La expresión contiene una operación no permitida.")
+
     def evaluar(self, x):
-        self._evaluador.names["x"] = x
         try:
-            resultado = self._evaluador.eval(self.expresion, previously_parsed=self._expresion_parseada)
+            resultado = self._evaluar_nodo(self._expresion_parseada, x)
             if isinstance(resultado, bool) or not isinstance(resultado, (int, float)):
                 raise ValueError("La función debe producir un valor real.")
             resultado = float(resultado)
