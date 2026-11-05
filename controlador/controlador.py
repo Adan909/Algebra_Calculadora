@@ -1,6 +1,6 @@
 from vista.ventana_principal import VentanaPrincipal
 from modelo.solucionador import SolucionadorGauss, SolucionadorGaussJordan, SolucionadorLU
-from modelo.biseccion import FuncionMatematica, biseccion
+from modelo.biseccion import FuncionMatematica, biseccion, verificar_continuidad, ResultadoContinuidad
 
 # Importar funciones de modelo
 from modelo.matriz import formatear_fraccion, formatear_matriz
@@ -53,6 +53,21 @@ class Controlador:
             self.vista.mostrar_error("Entrada no válida", str(error))
             return
         self.vista.mostrar_resultado_biseccion(resultado, expresion)
+
+    def analizar_continuidad(self):
+        try:
+            funcion_str = self.vista.biseccion_funcion.get().strip()
+            a_str = self.vista.biseccion_a.get().strip()
+            b_str = self.vista.biseccion_b.get().strip()
+            if not funcion_str:
+                self.vista.mostrar_error("Entrada no válida", "Por favor ingrese una función matemática.")
+                return
+            expresion = FuncionMatematica(funcion_str)
+            resultado_cont = expresion.analizar_continuidad(a_str, b_str)
+        except (ValueError, OverflowError) as error:
+            self.vista.mostrar_error("Error de Continuidad", str(error))
+            return
+        self.vista.mostrar_demostracion_continuidad(resultado_cont)
 
     def cargar_ejemplo_biseccion(self):
         # Mantiene el ejemplo como datos de entrada: la tabla siempre se calcula con el algoritmo.

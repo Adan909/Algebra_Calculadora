@@ -1605,6 +1605,7 @@ class VentanaPrincipal:
         actions.pack(fill=tk.X, pady=(4, 0))
 
         BotonPrimario(actions, text="⚡ CALCULAR RAÍZ", command=self.controlador.calcular_biseccion, font=FONT_SMALL_BOLD).pack(side=tk.LEFT, padx=(0, 6))
+        BotonSecundario(actions, text="🔬 Demostrar Continuidad", command=self.controlador.analizar_continuidad, font=FONT_SMALL_BOLD).pack(side=tk.LEFT, padx=6)
         BotonSecundario(actions, text="🧹 Limpiar", command=self.controlador.limpiar_biseccion, font=FONT_SMALL_BOLD).pack(side=tk.LEFT, padx=6)
         BotonSecundario(actions, text="★ Ejemplo del Profesor", command=self.controlador.cargar_ejemplo_biseccion, font=FONT_SMALL_BOLD).pack(side=tk.LEFT, padx=6)
         tk.Label(actions, text="Funciones soportadas: sin, cos, tan, sqrt, log, exp, potencias (^)", font=FONT_MICRO, bg=BG_CARD, fg=TEXT_MUTED).pack(side=tk.RIGHT)
@@ -1616,6 +1617,7 @@ class VentanaPrincipal:
         self.biseccion_raiz = self._biseccion_metric(summary, "Raíz Aproximada", "—", ACCENT_PRIMARY)
         self.biseccion_error_final = self._biseccion_metric(summary, "Error Relativo Final", "—", TEXT_PRIMARY)
         self.biseccion_iteraciones_total = self._biseccion_metric(summary, "Iteraciones", "—", TEXT_PRIMARY)
+        self.biseccion_continuidad = self._biseccion_metric(summary, "Continuidad [a, b]", "—", TEXT_MUTED)
         self.biseccion_estado = self._biseccion_metric(summary, "Estado", "Esperando datos", TEXT_MUTED)
 
         # Gráfica y Explicación
@@ -1704,6 +1706,15 @@ class VentanaPrincipal:
             text="—" if resultado.error_final is None else f"{resultado.error_final:.6g} %"
         )
         self.biseccion_iteraciones_total.config(text=str(len(resultado.iteraciones)))
+        if getattr(resultado, "continuidad", None):
+            cont = resultado.continuidad
+            self.biseccion_continuidad.config(
+                text="Continua ✓" if cont.es_continua else "Discontinua ✗",
+                fg=SUCCESS_TEXT if cont.es_continua else ERROR_TEXT
+            )
+        else:
+            self.biseccion_continuidad.config(text="—", fg=TEXT_MUTED)
+
         self.biseccion_estado.config(
             text="CONVERGIÓ" if resultado.convergio else "LÍMITE ALCANZADO",
             fg=SUCCESS_TEXT if resultado.convergio else WARNING_TEXT,
@@ -1717,32 +1728,76 @@ class VentanaPrincipal:
                 self._numero_biseccion(fila.fb), self._numero_biseccion(fila.fc),
                 fila.signo_producto, self._numero_biseccion(abs(fila.fc)),
             ), tags=("ultima",) if indice == len(resultado.iteraciones) - 1 else ())
-        self.biseccion_selector["values"] = tuple(
-            f"Iteración {fila.numero}" for fila in resultado.iteraciones
-        )
+
+        opciones = []
+        if getattr(resultado, "continuidad", None):
+            opciones.append("🔬 Demostración de Continuidad y Bolzano")
+        opciones.extend(f"Iteración {fila.numero}" for fila in resultado.iteraciones)
+        self.biseccion_selector["values"] = tuple(opciones)
+
         if resultado.iteraciones:
-            indice_final = len(resultado.iteraciones) - 1
-            self.biseccion_selector.current(indice_final)
-            self._mostrar_iteracion_biseccion(indice_final)
-            self.biseccion_tabla.selection_set(str(indice_final))
+            indice_iter = len(resultado.iteraciones) - 1
+            idx_combo = (1 + indice_iter) if getattr(resultado, "continuidad", None) else indice_iter
+            self.biseccion_selector.current(idx_combo)
+            self._mostrar_iteracion_biseccion(indice_iter)
+            self.biseccion_tabla.selection_set(str(indice_iter))
         else:
-            self.biseccion_selector.set("")
-            self.biseccion_explicacion.config(text=resultado.motivo)
+            if getattr(resultado, "continuidad", None):
+                self.biseccion_selector.current(0)
+                self._mostrar_explicacion_continuidad()
+            else:
+                self.biseccion_selector.set("")
+                self.biseccion_explicacion.config(text=resultado.motivo)
         self._dibujar_grafica_biseccion()
         self._ops()
 
+    def _mostrar_explicacion_continuidad(self):
+        if not self._resultado_biseccion or not getattr(self._resultado_biseccion, "continuidad", None):
+            return
+        cont = self._resultado_biseccion.continuidad
+        estado_c = "CONTINUA EN [a, b] ✓" if cont.es_continua else "DISCONTINUA ✗"
+        signo_c = "CAMBIO DE SIGNO f(a)·f(b) < 0 ✓" if cont.cambio_signo else "MISMO SIGNO EN EXTREMOS ✗"
+        bolzano_c = "TEOREMA DE BOLZANO: APLICABLE (Raíz garantizada) ✓" if cont.aplica_bolzano else "TEOREMA DE BOLZANO: NO APLICABLE"
+        texto = (
+            f"=== VERIFICACIÓN DE CONTINUIDAD Y BOLZANO ===\n\n"
+            f"• Función: f(x) = {cont.expresion_str}\n"
+            f"• Intervalo de análisis: [{cont.a:.10g}, {cont.b:.10g}]\n"
+            f"• Tipo de función: {cont.tipo_funcion}\n"
+            f"• Continuidad: {estado_c}\n"
+            f"• Condición de signos: {signo_c}\n"
+            f"• {bolzano_c}\n\n"
+            f"{cont.resumen}\n\n"
+            f"Presiona '🔬 Demostrar Continuidad' para abrir el informe con las 3 condiciones de Cauchy-Weierstrass y la demostración formal paso a paso."
+        )
+        self.biseccion_explicacion.config(text=texto)
+
     def _seleccionar_iteracion_biseccion(self, _event=None):
-        indice = self.biseccion_selector.current()
-        if indice >= 0:
-            self._mostrar_iteracion_biseccion(indice)
-            self.biseccion_tabla.selection_set(str(indice))
+        val = self.biseccion_selector.get()
+        if not val or not self._resultado_biseccion:
+            return
+        if "Demostración de Continuidad" in val:
+            self._mostrar_explicacion_continuidad()
+            for item in self.biseccion_tabla.selection():
+                self.biseccion_tabla.selection_remove(item)
+            self._iteracion_seleccionada = None
             self._dibujar_grafica_biseccion()
+        else:
+            match = re.search(r"Iteración\s+(\d+)", val)
+            if match:
+                num = int(match.group(1))
+                indice = num - 1
+                if 0 <= indice < len(self._resultado_biseccion.iteraciones):
+                    self._mostrar_iteracion_biseccion(indice)
+                    self.biseccion_tabla.selection_set(str(indice))
+                    self._dibujar_grafica_biseccion()
 
     def _seleccionar_fila_biseccion(self, _event=None):
         seleccion = self.biseccion_tabla.selection()
-        if seleccion:
+        if seleccion and self._resultado_biseccion:
             indice = int(seleccion[0])
-            self.biseccion_selector.current(indice)
+            offset = 1 if getattr(self._resultado_biseccion, "continuidad", None) else 0
+            if 0 <= indice + offset < len(self.biseccion_selector["values"]):
+                self.biseccion_selector.current(indice + offset)
             self._mostrar_iteracion_biseccion(indice)
             self._dibujar_grafica_biseccion()
 
@@ -1765,6 +1820,118 @@ class VentanaPrincipal:
         )
         self.biseccion_explicacion.config(text=texto)
         self._iteracion_seleccionada = fila
+
+    def mostrar_demostracion_continuidad(self, resultado_cont):
+        """
+        Abre una ventana modal con la justificación matemática y demostración formal
+        de continuidad en el intervalo evaluado, explicando las 3 condiciones de cálculo
+        y la validez del Teorema de Bolzano.
+        """
+        if resultado_cont is None:
+            return
+
+        modal = tk.Toplevel(self.root)
+        modal.title("Demostración Matemática de Continuidad · Álgebra & Cálculo")
+        modal.geometry("740x640")
+        modal.minsize(600, 500)
+        modal.configure(bg=BG_WINDOW)
+        modal.transient(self.root)
+        modal.grab_set()
+
+        # Cabecera
+        header = tk.Frame(modal, bg=BG_CARD, padx=20, pady=14, highlightthickness=1, highlightbackground=BORDER_SUBTLE)
+        header.pack(fill=tk.X, padx=12, pady=(12, 8))
+
+        tk.Label(
+            header, text="🔬 Verificación y Demostración Formal de Continuidad",
+            font=FONT_HEADING, bg=BG_CARD, fg=TEXT_PRIMARY
+        ).pack(anchor="w")
+
+        tk.Label(
+            header,
+            text=f"Análisis riguroso en [{resultado_cont.a:g}, {resultado_cont.b:g}] según el Teorema del Valor Intermedio (Bolzano)",
+            font=FONT_SMALL, bg=BG_CARD, fg=TEXT_SECONDARY
+        ).pack(anchor="w", pady=(2, 0))
+
+        # Tarjetas de datos rápidos y Badges
+        info_frame = tk.Frame(modal, bg=BG_WINDOW)
+        info_frame.pack(fill=tk.X, padx=12, pady=(0, 8))
+
+        c_fn = tk.Frame(info_frame, bg=BG_CARD, padx=12, pady=8, highlightthickness=1, highlightbackground=BORDER_SUBTLE)
+        c_fn.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 4))
+        tk.Label(c_fn, text="Función Evaluada", font=FONT_MICRO, bg=BG_CARD, fg=TEXT_MUTED).pack(anchor="w")
+        tk.Label(c_fn, text=f"f(x) = {resultado_cont.expresion_str}", font=FONT_BODY_BOLD, bg=BG_CARD, fg=ACCENT_PRIMARY).pack(anchor="w")
+        tk.Label(c_fn, text=f"Tipo: {resultado_cont.tipo_funcion}", font=FONT_MICRO, bg=BG_CARD, fg=TEXT_SECONDARY).pack(anchor="w")
+
+        c_st = tk.Frame(info_frame, bg=BG_CARD, padx=12, pady=8, highlightthickness=1, highlightbackground=BORDER_SUBTLE)
+        c_st.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(4, 0))
+        tk.Label(c_st, text="Estado de Continuidad & Bolzano", font=FONT_MICRO, bg=BG_CARD, fg=TEXT_MUTED).pack(anchor="w")
+        
+        estado_txt = "CONTINUA EN EL INTERVALO" if resultado_cont.es_continua else "DISCONTINUA"
+        estado_col = SUCCESS_TEXT if resultado_cont.es_continua else ERROR_TEXT
+        tk.Label(c_st, text=estado_txt, font=FONT_BODY_BOLD, bg=BG_CARD, fg=estado_col).pack(anchor="w")
+        
+        bolz_txt = "Bolzano Válido (Raíz asegurada)" if resultado_cont.aplica_bolzano else "Bolzano No Aplicable"
+        bolz_col = SUCCESS_TEXT if resultado_cont.aplica_bolzano else WARNING_TEXT
+        tk.Label(c_st, text=bolz_txt, font=FONT_MICRO, bg=BG_CARD, fg=bolz_col).pack(anchor="w")
+
+        # Texto con scroll para el desarrollo matemático
+        t_card = Tarjeta(modal, titulo="Fundamentación y Demostración Matemática", subtitulo="Comprobación formal de las 3 condiciones de Cauchy-Weierstrass")
+        t_card.pack(fill=tk.BOTH, expand=True, padx=12, pady=(0, 10))
+
+        txt_frame = tk.Frame(t_card.contenido, bg=BG_CARD)
+        txt_frame.pack(fill=tk.BOTH, expand=True)
+
+        txt_demo = tk.Text(
+            txt_frame, font=FONT_MONO_SM, bg=BG_SECONDARY, fg=TEXT_PRIMARY,
+            wrap="word", relief="flat", bd=0, padx=12, pady=10
+        )
+        scroll_demo = ttk.Scrollbar(txt_frame, orient="vertical", command=txt_demo.yview)
+        txt_demo.configure(yscrollcommand=scroll_demo.set)
+        txt_demo.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scroll_demo.pack(side=tk.RIGHT, fill=tk.Y)
+
+        bloques = [
+            resultado_cont.demostracion_formal,
+            "\n" + "=" * 60,
+            "DETALLE DE LAS 3 CONDICIONES DE CONTINUIDAD:",
+            "-" * 60,
+            "Condición 1 (Pertenencia al Dominio / Evaluación de f(c)):",
+            resultado_cont.condicion_1_evaluacion,
+            "",
+            "Condición 2 (Existencia y Finitud de Límites Laterales):",
+            resultado_cont.condicion_2_limites,
+            "",
+            "Condición 3 (Igualdad del Límite y el Valor de la Función):",
+            resultado_cont.condicion_3_coincidencia,
+            "\n" + "=" * 60,
+            resultado_cont.teorema_bolzano,
+            "=" * 60
+        ]
+        texto_completo = "\n".join(bloques)
+
+        txt_demo.insert("1.0", texto_completo)
+        txt_demo.config(state="disabled")
+
+        # Barra inferior de acciones
+        btn_bar = tk.Frame(modal, bg=BG_WINDOW)
+        btn_bar.pack(fill=tk.X, padx=12, pady=(0, 12))
+
+        lbl_copiado = tk.Label(btn_bar, text="", font=FONT_SMALL, bg=BG_WINDOW, fg=SUCCESS_TEXT)
+        lbl_copiado.pack(side=tk.LEFT, padx=6)
+
+        def _copiar():
+            try:
+                modal.clipboard_clear()
+                modal.clipboard_append(texto_completo)
+                lbl_copiado.config(text="✓ Demostración copiada al portapapeles")
+                modal.after(2500, lambda: lbl_copiado.config(text=""))
+            except Exception:
+                pass
+
+        BotonSecundario(btn_bar, text="📋 Copiar Demostración", command=_copiar).pack(side=tk.RIGHT, padx=6)
+        BotonPrimario(btn_bar, text="Entendido / Cerrar", command=modal.destroy).pack(side=tk.RIGHT, padx=6)
+        self._ops()
 
     def _zoom_grafica_biseccion(self, event):
         """
@@ -1883,6 +2050,7 @@ class VentanaPrincipal:
         self.biseccion_raiz.config(text="—")
         self.biseccion_error_final.config(text="—")
         self.biseccion_iteraciones_total.config(text="—")
+        self.biseccion_continuidad.config(text="—", fg=TEXT_MUTED)
         self.biseccion_estado.config(text="Esperando datos", fg=TEXT_MUTED)
         self._resultado_biseccion = None
         self._funcion_grafica_biseccion = None

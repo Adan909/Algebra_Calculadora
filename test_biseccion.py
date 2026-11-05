@@ -1,6 +1,6 @@
 import unittest
 
-from modelo.biseccion import FuncionMatematica, biseccion
+from modelo.biseccion import FuncionMatematica, biseccion, verificar_continuidad, ResultadoContinuidad
 
 
 class PruebasBiseccion(unittest.TestCase):
@@ -14,10 +14,60 @@ class PruebasBiseccion(unittest.TestCase):
         self.assertAlmostEqual(resultado.iteraciones[6].c, 0.760546875)
         self.assertAlmostEqual(resultado.iteraciones[6].error_relativo, 0.56497175)
         self.assertIsNone(resultado.iteraciones[0].error_relativo)
+        self.assertIsNotNone(resultado.continuidad)
+        self.assertTrue(resultado.continuidad.es_continua)
+        self.assertEqual(resultado.continuidad.tipo_funcion, "Polinómica")
         funcion = FuncionMatematica("x^4 - 5*x^3 + 0.5*x^2 - 11*x + 10")
         for fila in resultado.iteraciones:
             with self.subTest(iteracion=fila.numero):
                 self.assertAlmostEqual(fila.fb, funcion.evaluar(fila.b))
+
+    # Prueba la función polinómica 3*x^3 + 2*x^2 - 1.54 y su continuidad en [0, 1].
+    def test_continuidad_polinomica_usuario(self):
+        analisis = verificar_continuidad("3*x^3 + 2*x^2 - 1.54", 0, 1)
+        self.assertTrue(analisis.es_continua)
+        self.assertEqual(analisis.tipo_funcion, "Polinómica")
+        self.assertTrue(analisis.cambio_signo)
+        self.assertTrue(analisis.aplica_bolzano)
+        self.assertIn("✓ CUMPLIDA", analisis.condicion_1_evaluacion)
+        self.assertIn("✓ CUMPLIDA", analisis.condicion_2_limites)
+        self.assertIn("✓ CUMPLIDA", analisis.condicion_3_coincidencia)
+        self.assertIn("TEOREMA DE BOLZANO", analisis.teorema_bolzano)
+
+        # Cálculo de raíz mediante bisección
+        res = biseccion("3*x^3 + 2*x^2 - 1.54", 0, 1, 0.01, 100)
+        self.assertTrue(res.convergio)
+        self.assertAlmostEqual(res.raiz, 0.62935, places=3)
+
+    # Verifica detección de discontinuidades en funciones racionales o radicales fuera de dominio.
+    def test_deteccion_discontinuidades(self):
+        # 1/x en [-1, 1] presenta una discontinuidad en x = 0
+        analisis_inv = verificar_continuidad("1/x", -1, 1)
+        self.assertFalse(analisis_inv.es_continua)
+        self.assertFalse(analisis_inv.aplica_bolzano)
+        self.assertTrue(len(analisis_inv.puntos_discontinuidad) > 0)
+
+        # sqrt(x) en [-2, 2] no está definida para x < 0
+        analisis_sqrt = verificar_continuidad("sqrt(x)", -2, 2)
+        self.assertFalse(analisis_sqrt.es_continua)
+        self.assertFalse(analisis_sqrt.aplica_bolzano)
+
+        # tan(x) en [1, 2] tiene asíntota vertical en pi/2 ≈ 1.5708
+        analisis_tan = verificar_continuidad("tan(x)", 1, 2)
+        self.assertFalse(analisis_tan.es_continua)
+        self.assertFalse(analisis_tan.aplica_bolzano)
+
+        # log(x) en [-0.5, 2] no está definida para x <= 0
+        analisis_log = verificar_continuidad("log(x)", -0.5, 2)
+        self.assertFalse(analisis_log.es_continua)
+        self.assertFalse(analisis_log.aplica_bolzano)
+
+    # Verifica funciones continuas sin cambio de signo.
+    def test_continuidad_sin_cambio_signo(self):
+        analisis = verificar_continuidad("x^2 + 1", 0, 2)
+        self.assertTrue(analisis.es_continua)
+        self.assertFalse(analisis.cambio_signo)
+        self.assertFalse(analisis.aplica_bolzano)
 
     # Usa entradas textuales como las que obtiene el controlador desde los campos Tkinter.
     def test_otra_funcion(self):
@@ -60,6 +110,23 @@ class PruebasBiseccion(unittest.TestCase):
         resultado = biseccion("x^2 - 2", 1, 2, 1e-12, 1)
         self.assertFalse(resultado.convergio)
         self.assertEqual(len(resultado.iteraciones), 1)
+
+    # Verifica la integración con el Controlador y la Vista gráfica.
+    def test_integracion_controlador_vista(self):
+        import tkinter as tk
+        from controlador.controlador import Controlador
+
+        root = tk.Tk()
+        root.withdraw()
+        try:
+            app = Controlador(root)
+            app.cargar_ejemplo_biseccion()
+            self.assertIsNotNone(app.vista._resultado_biseccion)
+            self.assertIsNotNone(app.vista._resultado_biseccion.continuidad)
+            self.assertTrue(app.vista._resultado_biseccion.continuidad.es_continua)
+            app.analizar_continuidad()
+        finally:
+            root.destroy()
 
 
 if __name__ == "__main__":
