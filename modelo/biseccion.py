@@ -81,6 +81,7 @@ class IteracionBiseccion:
     b: float
     c: float
     fa: float
+    fb: float
     fc: float
     signo_producto: str
     error_relativo: float | None
@@ -165,7 +166,7 @@ def biseccion(expresion, a, b, error_permitido, max_iteraciones):
             modificado, nuevo_a, nuevo_b = "a", c, b
 
         filas.append(IteracionBiseccion(
-            numero, a, b, c, fa, fc, producto_signo, error,
+            numero, a, b, c, fa, fb, fc, producto_signo, error,
             modificado, nuevo_a, nuevo_b, criterio_fila,
         ))
 
@@ -179,6 +180,9 @@ def biseccion(expresion, a, b, error_permitido, max_iteraciones):
         if modificado == "a":
             # Reutiliza f(c) como nuevo f(a) en la siguiente iteración.
             fa = fc
+        elif modificado == "b":
+            # Reutiliza f(c) como nuevo f(b) en la siguiente iteración.
+            fb = fc
         anterior = c
         criterio = criterio_fila
 

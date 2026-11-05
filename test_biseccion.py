@@ -14,6 +14,10 @@ class PruebasBiseccion(unittest.TestCase):
         self.assertAlmostEqual(resultado.iteraciones[6].c, 0.760546875)
         self.assertAlmostEqual(resultado.iteraciones[6].error_relativo, 0.56497175)
         self.assertIsNone(resultado.iteraciones[0].error_relativo)
+        funcion = FuncionMatematica("x^4 - 5*x^3 + 0.5*x^2 - 11*x + 10")
+        for fila in resultado.iteraciones:
+            with self.subTest(iteracion=fila.numero):
+                self.assertAlmostEqual(fila.fb, funcion.evaluar(fila.b))
 
     # Usa entradas textuales como las que obtiene el controlador desde los campos Tkinter.
     def test_otra_funcion(self):

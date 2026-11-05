@@ -4,53 +4,44 @@ from vista.componentes import ScrollableFrame
 import time
 
 # ==============================================================================
-# PALETA: CONSOLA DE MISION — NEGRO ABSOLUTO + AZUL ELECTRICO
-# Texto siempre en blanco puro (#FFFFFF) para maxima legibilidad.
+# PALETA CÁLIDA — CREMA, ARENA Y TERRACOTA
 # ==============================================================================
 
-# Fondos
-C_ROOT      = "#000000"   # Fondo raiz — negro puro
-C_PANEL     = "#030912"   # Panel de contenido
-C_SECTION   = "#050e1f"   # Sección / bloque de trabajo
-C_INPUT     = "#020710"   # Fondo de entrada / consola
-C_HEADER    = "#071428"   # Cabecera de sección
-
-# Azules de estructura
-C_BORDER    = "#0d2a52"   # Borde de elementos
-C_ACCENT    = "#0055bb"   # Azul de acento (botones, divisores)
-C_BRIGHT    = "#0088ff"   # Azul brillante (hover, foco)
-C_GLOW      = "#00aaff"   # Azul neón (destacados, titulos de header)
-C_NEON      = "#00ccff"   # Cian de alta precisión (valores críticos)
-
-# Texto — SIEMPRE LEGIBLE
-C_WHITE     = "#ffffff"   # Texto principal — blanco puro
-C_SILVER    = "#c8ddf0"   # Texto secundario — blanco azulado
-C_MUTED     = "#7aaaca"   # Texto terciario (aun legible)
-C_CODE      = "#40d0ff"   # Valores numéricos / código
-
-# Semántica de estado
-C_OK        = "#00e87a"   # Verde osciloscopio
-C_WARN      = "#ff3333"   # Rojo alarma
-C_CAUTION   = "#ffaa00"   # Ámbar advertencia
+C_ROOT      = "#FAF6F0"
+C_PANEL     = "#FFFDF9"
+C_SECTION   = "#F7EFE4"
+C_INPUT     = "#FFFFFF"
+C_HEADER    = "#F3E3D3"
+C_BORDER    = "#E8D5C4"
+C_ACCENT    = "#D98E63"
+C_BRIGHT    = "#E9A876"
+C_GLOW      = "#C97B4E"
+C_NEON      = "#7A4E2D"
+C_WHITE     = "#2E2A26"
+C_SILVER    = "#5C534B"
+C_MUTED     = "#8A7E73"
+C_CODE      = "#7A4E2D"
+C_OK        = "#4C8C4A"
+C_WARN      = "#B3402F"
+C_CAUTION   = "#B5651D"
 
 # ==============================================================================
 # TIPOGRAFÍA
 # ==============================================================================
-F_DISPLAY  = ("JetBrains Mono", 15, "bold")
-F_HEADING  = ("JetBrains Mono", 11, "bold")
-F_SUBHEAD  = ("JetBrains Mono", 10, "bold")
-F_LABEL    = ("Courier New", 9, "bold")
-F_MONO     = ("JetBrains Mono", 10)
-F_MONO_B   = ("JetBrains Mono", 10, "bold")
-F_MONO_LG  = ("JetBrains Mono", 12, "bold")
+F_DISPLAY  = ("Segoe UI", 17, "bold")
+F_HEADING  = ("Segoe UI", 11, "bold")
+F_SUBHEAD  = ("Segoe UI", 10, "bold")
+F_LABEL    = ("Segoe UI", 10)
+F_MONO     = ("Consolas", 10)
+F_MONO_B   = ("Consolas", 10, "bold")
+F_MONO_LG  = ("Consolas", 12, "bold")
 F_MATRIX   = ("Consolas", 11, "bold")
-F_SMALL    = ("Courier New", 8)
+F_SMALL    = ("Segoe UI", 9)
 
 
 class VentanaPrincipal:
     """
-    Consola de álgebra lineal — Interfaz técnica industrial.
-    Negro absoluto + azul eléctrico. Texto blanco puro en toda la UI.
+    Consola de álgebra lineal con una interfaz cálida, clara y legible.
     """
     def __init__(self, root, controlador):
         self.root = root
@@ -58,6 +49,25 @@ class VentanaPrincipal:
         self.root.geometry("1260x900")
         self.root.minsize(1080, 800)
         self.root.configure(bg=C_ROOT)
+
+        self._scroll_canvas = tk.Canvas(
+            self.root, bg=C_ROOT, highlightthickness=0, borderwidth=0
+        )
+        self._scrollbar_vertical = ttk.Scrollbar(
+            self.root, orient="vertical", command=self._scroll_canvas.yview
+        )
+        self._scroll_canvas.configure(yscrollcommand=self._scrollbar_vertical.set)
+        self._scroll_canvas.grid(row=0, column=0, sticky="nsew")
+        self._scrollbar_vertical.grid(row=0, column=1, sticky="ns")
+        self.root.grid_rowconfigure(0, weight=1)
+        self.root.grid_columnconfigure(0, weight=1)
+
+        self._contenido_scroll = tk.Frame(self._scroll_canvas, bg=C_ROOT)
+        self._ventana_scroll = self._scroll_canvas.create_window(
+            (0, 0), window=self._contenido_scroll, anchor="nw"
+        )
+        self._contenido_scroll.bind("<Configure>", self._actualizar_region_scroll)
+        self._scroll_canvas.bind("<Configure>", self._ajustar_contenido_scroll)
 
         self.controlador = controlador
         self._op_count = 0
@@ -69,6 +79,15 @@ class VentanaPrincipal:
         self._footer()
         self._body()
         self._tick()
+
+    def _actualizar_region_scroll(self, _event=None):
+        self._scroll_canvas.configure(scrollregion=self._scroll_canvas.bbox("all"))
+
+    def _ajustar_contenido_scroll(self, event):
+        alto_contenido = max(event.height, self._contenido_scroll.winfo_reqheight())
+        self._scroll_canvas.itemconfigure(
+            self._ventana_scroll, width=event.width, height=alto_contenido
+        )
 
     # ==========================================================================
     # ESTILOS TTK
@@ -89,47 +108,47 @@ class VentanaPrincipal:
 
         # ── BOTÓN PRIMARIO ─────────────────────────────────────────────────────
         s.configure("P.TButton",
-            background=C_ACCENT, foreground=C_WHITE,
-            bordercolor=C_BRIGHT, borderwidth=1,
-            relief="flat", font=F_MONO_B, padding=(16, 7))
+            background=C_ACCENT, foreground="#FFFDF9",
+            bordercolor=C_BORDER, borderwidth=1,
+            relief="flat", font=("Segoe UI", 10, "bold"), padding=(16, 8))
         s.map("P.TButton",
-            background=[("active", C_BRIGHT), ("disabled", "#0a1a30")],
-            foreground=[("active", C_WHITE),  ("disabled", C_MUTED)],
-            bordercolor=[("active", C_NEON)])
+            background=[("active", C_GLOW), ("disabled", C_HEADER)],
+            foreground=[("active", "#FFFDF9"), ("disabled", C_MUTED)],
+            bordercolor=[("active", C_GLOW)])
 
         # ── BOTÓN SECUNDARIO ──────────────────────────────────────────────────
         s.configure("S.TButton",
-            background=C_HEADER, foreground=C_SILVER,
+            background=C_SECTION, foreground=C_WHITE,
             bordercolor=C_BORDER, borderwidth=1,
-            relief="flat", font=F_LABEL, padding=(10, 5))
+            relief="flat", font=F_LABEL, padding=(11, 6))
         s.map("S.TButton",
-            background=[("active", C_ACCENT)],
+            background=[("active", C_HEADER)],
             foreground=[("active", C_WHITE)],
             bordercolor=[("active", C_BRIGHT)])
 
         # ── NOTEBOOK PRINCIPAL ────────────────────────────────────────────────
-        s.configure("Main.TNotebook", background=C_ROOT, borderwidth=0, tabmargins=[0,0,0,0])
+        s.configure("Main.TNotebook", background=C_ROOT, borderwidth=0, tabmargins=[2, 4, 2, 0])
         s.configure("Main.TNotebook.Tab",
-            background="#010a1c", foreground=C_MUTED,
-            padding=[22, 10], font=F_MONO_B, borderwidth=0)
+            background=C_SECTION, foreground=C_SILVER,
+            padding=[20, 11], font=("Segoe UI", 10, "bold"), borderwidth=0)
         s.map("Main.TNotebook.Tab",
-            background=[("selected", C_HEADER), ("active", "#0a1e3c")],
-            foreground=[("selected", C_WHITE),  ("active", C_SILVER)])
+            background=[("selected", C_ACCENT), ("active", C_HEADER)],
+            foreground=[("selected", "#FFFDF9"), ("active", C_WHITE)])
 
         # ── NOTEBOOK INTERNO ──────────────────────────────────────────────────
-        s.configure("Sub.TNotebook", background=C_SECTION, borderwidth=0, tabmargins=[0,0,0,0])
+        s.configure("Sub.TNotebook", background=C_SECTION, borderwidth=0, tabmargins=[2, 3, 2, 0])
         s.configure("Sub.TNotebook.Tab",
-            background=C_PANEL, foreground=C_MUTED,
-            padding=[14, 6], font=F_LABEL, borderwidth=0)
+            background=C_PANEL, foreground=C_SILVER,
+            padding=[14, 7], font=F_LABEL, borderwidth=0)
         s.map("Sub.TNotebook.Tab",
-            background=[("selected", C_ACCENT), ("active", "#0a1e3c")],
+            background=[("selected", C_HEADER), ("active", C_PANEL)],
             foreground=[("selected", C_WHITE),  ("active", C_SILVER)])
 
         # ── COMBOBOX ──────────────────────────────────────────────────────────
         s.configure("TCombobox",
             fieldbackground=C_INPUT, background=C_HEADER,
             foreground=C_WHITE, arrowcolor=C_GLOW,
-            bordercolor=C_BORDER, insertcolor=C_NEON, padding=(6, 4))
+            bordercolor=C_BORDER, insertcolor=C_NEON, padding=(7, 5))
         s.map("TCombobox",
             fieldbackground=[("readonly", C_INPUT)],
             foreground=[("readonly", C_WHITE)],
@@ -139,82 +158,91 @@ class VentanaPrincipal:
         s.configure("TSpinbox",
             fieldbackground=C_INPUT, background=C_HEADER,
             foreground=C_WHITE, arrowcolor=C_GLOW,
-            bordercolor=C_BORDER, insertcolor=C_NEON, padding=(6, 4))
+            bordercolor=C_BORDER, insertcolor=C_NEON, padding=(7, 5))
         s.map("TSpinbox", bordercolor=[("focus", C_GLOW)])
 
         # ── SCROLLBAR ─────────────────────────────────────────────────────────
         s.configure("TScrollbar",
-            background=C_HEADER, troughcolor=C_ROOT,
-            bordercolor=C_ROOT, arrowcolor=C_ACCENT,
+            background=C_HEADER, troughcolor=C_SECTION,
+            bordercolor=C_SECTION, arrowcolor=C_GLOW,
             relief="flat", gripcount=0)
         s.map("TScrollbar", background=[("active", C_BRIGHT)])
 
         # ── LABEL ─────────────────────────────────────────────────────────────
         s.configure("TLabel", background=C_SECTION, foreground=C_WHITE, font=F_LABEL)
+        s.configure("Treeview",
+                    background=C_INPUT, fieldbackground=C_INPUT, foreground=C_WHITE,
+                    bordercolor=C_BORDER, rowheight=27, font=F_MONO)
+        s.configure("Treeview.Heading",
+                    background=C_HEADER, foreground=C_WHITE,
+                    bordercolor=C_BORDER, font=("Segoe UI", 9, "bold"), padding=(7, 6))
+        s.map("Treeview",
+              background=[("selected", C_HEADER)],
+              foreground=[("selected", C_WHITE)])
 
     # ==========================================================================
     # HEADER
     # ==========================================================================
     def _header(self):
         # Barra superior
-        bar = tk.Frame(self.root, bg="#030e20", height=58)
+        bar = tk.Frame(self._contenido_scroll, bg=C_HEADER, height=64)
         bar.pack(fill=tk.X, side=tk.TOP)
         bar.pack_propagate(False)
 
         # Marcador de identidad izquierdo
-        marker = tk.Frame(bar, bg=C_NEON, width=5)
+        marker = tk.Frame(bar, bg=C_ACCENT, width=5)
         marker.pack(side=tk.LEFT, fill=tk.Y)
 
-        left = tk.Frame(bar, bg="#030e20")
+        left = tk.Frame(bar, bg=C_HEADER)
         left.pack(side=tk.LEFT, fill=tk.Y, padx=(14, 0))
 
         tk.Label(left, text="ALGEBRA COMPUTATION ENGINE",
-                 font=F_DISPLAY, bg="#030e20", fg=C_WHITE).pack(anchor="w", pady=(8, 0))
+                 font=F_DISPLAY, bg=C_HEADER, fg=C_WHITE).pack(anchor="w", pady=(8, 0))
         tk.Label(left, text="KERNEL v3.0  ·  PRECISION RACIONAL EXACTA  ·  ESPACIO R^n",
-                 font=F_SMALL, bg="#030e20", fg=C_MUTED).pack(anchor="w")
+                 font=F_SMALL, bg=C_HEADER, fg=C_SILVER).pack(anchor="w")
 
         # Bloque derecho — reloj y estado
-        right = tk.Frame(bar, bg="#030e20")
+        right = tk.Frame(bar, bg=C_HEADER)
         right.pack(side=tk.RIGHT, fill=tk.Y, padx=20)
 
         self.lbl_clock = tk.Label(right, text="--:--:--",
-                                   font=F_HEADING, bg="#030e20", fg=C_GLOW)
+                                   font=F_HEADING, bg=C_HEADER, fg=C_GLOW)
         self.lbl_clock.pack(anchor="e", pady=(10, 2))
 
         tk.Label(right, text="MOTOR ACTIVO",
-                 font=F_SMALL, bg="#030e20", fg=C_OK).pack(anchor="e")
+                 font=F_SMALL, bg=C_HEADER, fg=C_OK).pack(anchor="e")
 
         # Líneas decorativas de separación
-        tk.Frame(self.root, bg=C_NEON, height=2).pack(fill=tk.X, side=tk.TOP)
-        tk.Frame(self.root, bg=C_ACCENT, height=1).pack(fill=tk.X, side=tk.TOP)
+        tk.Frame(self._contenido_scroll, bg=C_ACCENT, height=2).pack(fill=tk.X, side=tk.TOP)
+        tk.Frame(self._contenido_scroll, bg=C_ACCENT, height=1).pack(fill=tk.X, side=tk.TOP)
 
     # ==========================================================================
     # FOOTER
     # ==========================================================================
     def _footer(self):
-        tk.Frame(self.root, bg=C_BORDER, height=1).pack(fill=tk.X, side=tk.BOTTOM)
+        tk.Frame(self._contenido_scroll, bg=C_BORDER, height=1).pack(fill=tk.X, side=tk.BOTTOM)
 
-        foot = tk.Frame(self.root, bg="#020b18", height=28)
+        foot = tk.Frame(self._contenido_scroll, bg=C_HEADER, height=30)
         foot.pack(fill=tk.X, side=tk.BOTTOM)
         foot.pack_propagate(False)
 
         tk.Frame(foot, bg=C_OK, width=4).pack(side=tk.LEFT, fill=tk.Y)
 
         tk.Label(foot, text="  ● SISTEMA ACTIVO",
-                 font=F_SMALL, bg="#020b18", fg=C_OK).pack(side=tk.LEFT, pady=6)
+                 font=F_SMALL, bg=C_HEADER, fg=C_OK).pack(side=tk.LEFT, pady=6)
 
         tk.Label(foot, text="  |  GAUSS-JORDAN  |  VECTORES R^n  |  BASES NUMERICAS  |  NUMEROS ROMANOS",
-                 font=F_SMALL, bg="#020b18", fg=C_MUTED).pack(side=tk.LEFT, pady=6)
+                 font=F_SMALL, bg=C_HEADER, fg=C_SILVER).pack(side=tk.LEFT, pady=6)
 
         self.lbl_op_count = tk.Label(foot, text="OPS: 0",
-                                      font=F_LABEL, bg="#020b18", fg=C_SILVER)
+                                      font=F_LABEL, bg=C_HEADER, fg=C_WHITE)
         self.lbl_op_count.pack(side=tk.RIGHT, padx=16)
 
     # ==========================================================================
     # BODY — Notebook principal
     # ==========================================================================
     def _body(self):
-        container = tk.Frame(self.root, bg=C_ROOT)
+        container = tk.Frame(self._contenido_scroll, bg=C_ROOT)
         container.pack(fill=tk.BOTH, expand=True, padx=0, pady=0)
 
         self.nb_main = ttk.Notebook(container, style="Main.TNotebook")
@@ -280,9 +308,9 @@ class VentanaPrincipal:
         if bar is not None:
             btn_fs = tk.Button(
                 bar, text=" ⛶ PANTALLA COMPLETA ", font=F_SMALL,
-                bg="#061a36", fg=C_NEON, activebackground=C_ACCENT,
+                bg=C_SECTION, fg=C_WHITE, activebackground=C_HEADER,
                 activeforeground=C_WHITE, bd=0, relief="flat",
-                cursor="hand2", padx=8, pady=1,
+                cursor="hand2", padx=10, pady=3,
                 command=lambda: self.abrir_consola_fullscreen(titulo, target)
             )
             btn_fs.pack(side=tk.RIGHT, padx=6, pady=2)
@@ -294,8 +322,8 @@ class VentanaPrincipal:
         )
 
         # Menú contextual con clic derecho
-        menu = tk.Menu(widget_text, tearoff=0, bg=C_HEADER, fg=C_WHITE,
-                       activebackground=C_ACCENT, activeforeground=C_WHITE,
+        menu = tk.Menu(widget_text, tearoff=0, bg=C_PANEL, fg=C_WHITE,
+                       activebackground=C_HEADER, activeforeground=C_WHITE,
                        font=F_LABEL, bd=1, relief="solid")
         menu.add_command(
             label="  ⛶  Abrir en Pantalla Completa",
@@ -319,7 +347,7 @@ class VentanaPrincipal:
 
     def abrir_consola_fullscreen(self, titulo, widget_origen):
         """
-        Abre una ventana emergente en pantalla completa técnica industrial.
+        Abre una ventana emergente en pantalla completa para la consola.
         Permite zoom con teclado o ratón, copiar al portapapeles, refrescar,
         alternar pantalla completa pura con F11 o botón, y cerrar con ESC.
         """
@@ -336,7 +364,7 @@ class VentanaPrincipal:
         tamano_fuente = [12]
 
         def actualizar_fuente():
-            txt_fs.config(font=("JetBrains Mono", tamano_fuente[0]))
+            txt_fs.config(font=("Consolas", tamano_fuente[0]))
 
         def zoom_in(event=None):
             if tamano_fuente[0] < 28:
@@ -393,12 +421,12 @@ class VentanaPrincipal:
 
         tk.Label(
             left_box, text="● MODO PANTALLA COMPLETA  ┃ ",
-            font=("JetBrains Mono", 10, "bold"), bg=C_HEADER, fg=C_OK
+            font=("Segoe UI", 10, "bold"), bg=C_HEADER, fg=C_OK
         ).pack(side=tk.LEFT)
 
         tk.Label(
             left_box, text=titulo.upper(),
-            font=("JetBrains Mono", 11, "bold"), bg=C_HEADER, fg=C_WHITE
+            font=("Segoe UI", 11, "bold"), bg=C_HEADER, fg=C_WHITE
         ).pack(side=tk.LEFT)
 
         lbl_copiado = tk.Label(
@@ -413,34 +441,34 @@ class VentanaPrincipal:
         # Botones de Zoom
         tk.Button(
             right_box, text=" A − ", font=F_MONO_B,
-            bg="#061833", fg=C_SILVER, activebackground=C_ACCENT, activeforeground=C_WHITE,
+            bg=C_SECTION, fg=C_WHITE, activebackground=C_HEADER, activeforeground=C_WHITE,
             bd=0, relief="flat", cursor="hand2", padx=6, pady=4, command=zoom_out
         ).pack(side=tk.LEFT, padx=2, pady=6)
 
         tk.Button(
             right_box, text=" A + ", font=F_MONO_B,
-            bg="#061833", fg=C_SILVER, activebackground=C_ACCENT, activeforeground=C_WHITE,
+            bg=C_SECTION, fg=C_WHITE, activebackground=C_HEADER, activeforeground=C_WHITE,
             bd=0, relief="flat", cursor="hand2", padx=6, pady=4, command=zoom_in
         ).pack(side=tk.LEFT, padx=2, pady=6)
 
         # Botón Copiar
         tk.Button(
             right_box, text=" 📋 COPIAR TODO ", font=F_MONO_B,
-            bg="#062244", fg=C_NEON, activebackground=C_BRIGHT, activeforeground=C_WHITE,
+            bg=C_ACCENT, fg="#FFFDF9", activebackground=C_GLOW, activeforeground="#FFFDF9",
             bd=0, relief="flat", cursor="hand2", padx=10, pady=4, command=copiar_todo
         ).pack(side=tk.LEFT, padx=4, pady=6)
 
         # Botón Recargar
         tk.Button(
             right_box, text=" ⟳ REFRESCAR ", font=F_MONO_B,
-            bg="#061833", fg=C_SILVER, activebackground=C_ACCENT, activeforeground=C_WHITE,
+            bg=C_SECTION, fg=C_WHITE, activebackground=C_HEADER, activeforeground=C_WHITE,
             bd=0, relief="flat", cursor="hand2", padx=8, pady=4, command=recargar_contenido
         ).pack(side=tk.LEFT, padx=4, pady=6)
 
         # Botón Toggle Fullscreen
         btn_toggle_fs = tk.Button(
             right_box, text=" 🗗 RESTAURAR (F11) ", font=F_MONO_B,
-            bg="#061833", fg=C_SILVER, activebackground=C_ACCENT, activeforeground=C_WHITE,
+            bg=C_SECTION, fg=C_WHITE, activebackground=C_HEADER, activeforeground=C_WHITE,
             bd=0, relief="flat", cursor="hand2", padx=8, pady=4, command=toggle_fullscreen
         )
         btn_toggle_fs.pack(side=tk.LEFT, padx=4, pady=6)
@@ -448,7 +476,7 @@ class VentanaPrincipal:
         # Botón Cerrar
         tk.Button(
             right_box, text=" ✕ CERRAR (ESC) ", font=F_MONO_B,
-            bg="#380505", fg="#ff8888", activebackground="#aa1111", activeforeground=C_WHITE,
+            bg="#F8E8E3", fg=C_WARN, activebackground="#EED0C7", activeforeground=C_WARN,
             bd=0, relief="flat", cursor="hand2", padx=12, pady=4, command=ventana_fs.destroy
         ).pack(side=tk.LEFT, padx=(6, 2), pady=6)
 
@@ -457,7 +485,7 @@ class VentanaPrincipal:
         body_frame.pack(fill=tk.BOTH, expand=True)
 
         txt_fs = tk.Text(
-            body_frame, font=("JetBrains Mono", tamano_fuente[0]),
+            body_frame, font=("Consolas", tamano_fuente[0]),
             bg=C_INPUT, fg=C_WHITE, insertbackground=C_NEON,
             selectbackground=C_ACCENT, selectforeground=C_WHITE,
             relief="flat", bd=0, wrap=tk.NONE,
@@ -476,14 +504,14 @@ class VentanaPrincipal:
         body_frame.grid_columnconfigure(0, weight=1)
 
         # ── Footer informativo ────────────────────────────────────────────────
-        footer = tk.Frame(ventana_fs, bg="#020b18", height=24)
+        footer = tk.Frame(ventana_fs, bg=C_HEADER, height=28)
         footer.pack(fill=tk.X, side=tk.BOTTOM)
         footer.pack_propagate(False)
 
         tk.Label(
             footer,
             text="  [ESC] Cerrar  ·  [F11] Pantalla Completa  ·  [Ctrl + C] Copiar  ·  [Ctrl + Rueda / A+, A-] Zoom",
-            font=F_SMALL, bg="#020b18", fg=C_MUTED
+            font=F_SMALL, bg=C_HEADER, fg=C_SILVER
         ).pack(side=tk.LEFT, padx=10, pady=3)
 
         recargar_contenido()
@@ -549,18 +577,18 @@ class VentanaPrincipal:
 
     def _entry(self, parent, width=8, bg=C_INPUT, hbg=C_BORDER, **kw):
         return tk.Entry(parent, width=width, font=F_MATRIX, justify="center",
-                        bg=bg, fg=C_WHITE, insertbackground=C_NEON,
+                        bg=bg, fg=C_CODE, insertbackground=C_GLOW,
                         relief="flat", bd=0,
                         highlightthickness=1, highlightbackground=hbg,
                         highlightcolor=C_GLOW, **kw)
 
     def _console(self, parent, height=12, wrap=tk.WORD, **kw):
         return tk.Text(parent, height=height, font=F_MONO,
-                       bg=C_INPUT, fg=C_WHITE,
-                       insertbackground=C_NEON,
-                       selectbackground=C_ACCENT, selectforeground=C_WHITE,
+                       bg=C_INPUT, fg=C_WHITE, spacing1=1, spacing3=1,
+                       insertbackground=C_GLOW,
+                       selectbackground=C_ACCENT, selectforeground="#FFFDF9",
                        relief="flat", bd=0,
-                       highlightthickness=1, highlightbackground=C_BORDER,
+                       padx=8, pady=7, highlightthickness=1, highlightbackground=C_BORDER,
                        highlightcolor=C_GLOW,
                        state=tk.DISABLED, wrap=wrap, **kw)
 
@@ -662,8 +690,8 @@ class VentanaPrincipal:
         # Botón de informe completo a pantalla completa en la barra del bloque
         btn_fs_gauss = tk.Button(
             wrap_res.bar, text=" ⛶ PANTALLA COMPLETA ", font=F_SMALL,
-            bg="#061a36", fg=C_NEON, activebackground=C_ACCENT,
-            activeforeground=C_WHITE, bd=0, relief="flat", cursor="hand2", padx=8, pady=1,
+            bg=C_SECTION, fg=C_WHITE, activebackground=C_HEADER,
+            activeforeground=C_WHITE, bd=0, relief="flat", cursor="hand2", padx=10, pady=3,
             command=lambda: self.abrir_consola_fullscreen(
                 "GAUSS-JORDAN · INFORME COMPLETO",
                 self._obtener_resumen_gauss_texto
@@ -756,7 +784,7 @@ class VentanaPrincipal:
             tk.Label(c, text="┃", font=("Consolas", 14), bg=C_SECTION, fg=C_ACCENT
                      ).grid(row=i+1, column=n+1, padx=4)
 
-            eb = self._entry(c, width=8, bg="#040d20", hbg=C_BRIGHT)
+            eb = self._entry(c, width=8, bg=C_INPUT, hbg=C_BORDER)
             eb.grid(row=i+1, column=n+2, padx=(4, 2), pady=4)
             eb.insert(0, "0")
             self.vector_entries.append(eb)
@@ -939,7 +967,7 @@ class VentanaPrincipal:
         tk.Label(c, text="b", font=F_HEADING, bg=C_SECTION, fg=C_NEON).grid(row=k, column=0, padx=6, pady=10)
         tk.Label(c, text="(", font=("Consolas", 13), bg=C_SECTION, fg=C_NEON).grid(row=k, column=1, pady=10)
         for j in range(n):
-            e = self._entry(c, width=7, bg="#040d20", hbg=C_BRIGHT)
+            e = self._entry(c, width=7, bg=C_INPUT, hbg=C_BORDER)
             e.grid(row=k, column=j+2, padx=3, pady=10); e.insert(0, "0")
             self.vec_b_entries.append(e)
         tk.Label(c, text=")", font=("Consolas", 13), bg=C_SECTION, fg=C_NEON).grid(row=k, column=n+2, pady=10)
@@ -972,7 +1000,7 @@ class VentanaPrincipal:
             tk.Label(c, text="[", font=("Consolas", 13), bg=C_SECTION, fg=C_NEON).grid(row=i+1, column=off)
             fila = []
             for j in range(n_b):
-                e = self._entry(c, width=7, bg="#040d20", hbg=C_BRIGHT)
+                e = self._entry(c, width=7, bg=C_INPUT, hbg=C_BORDER)
                 e.grid(row=i+1, column=j+off+1, padx=2, pady=2); e.insert(0, "0")
                 fila.append(e)
             self.mat_entries_b.append(fila)
@@ -1126,7 +1154,7 @@ class VentanaPrincipal:
 
         _, table = self._bloque(parent, "TABLA DE ITERACIONES", fill=tk.BOTH, expand=True)
         # El mismo identificador de fila sincroniza la tabla con el selector de explicación.
-        columns = ("i", "a", "b", "c", "fa", "fc", "signo", "error")
+        columns = ("i", "a", "b", "c", "fa", "fb", "fc", "signo", "abs_fc")
         table_frame = tk.Frame(table, bg=C_SECTION)
         table_frame.pack(fill=tk.BOTH, expand=True)
         table_frame.grid_rowconfigure(0, weight=1)
@@ -1136,13 +1164,14 @@ class VentanaPrincipal:
         headings = {
             "i": ("i", 45), "a": ("a", 100), "b": ("b", 100),
             "c": ("c (Punto Medio)", 130), "fa": ("f(a)", 105),
-            "fc": ("f(c)", 105), "signo": ("f(a)·f(c)", 95), "error": ("Ea (%)", 100),
+            "fb": ("f(b)", 105), "fc": ("f(c)", 105),
+            "signo": ("f(a)·f(c)", 95), "abs_fc": ("|f(c)|", 100),
         }
         for columna, (titulo, ancho) in headings.items():
             self.biseccion_tabla.heading(columna, text=titulo)
             self.biseccion_tabla.column(columna, width=ancho, minwidth=ancho, anchor=tk.CENTER,
-                                        stretch=columna in ("a", "b", "c", "fa", "fc"))
-        self.biseccion_tabla.tag_configure("ultima", background="#0b3150", foreground=C_NEON)
+                                        stretch=columna in ("a", "b", "c", "fa", "fb", "fc"))
+        self.biseccion_tabla.tag_configure("ultima", background=C_HEADER, foreground=C_CODE)
         self.biseccion_tabla.grid(row=0, column=0, sticky="nsew")
         scroll_y = ttk.Scrollbar(table_frame, orient="vertical", command=self.biseccion_tabla.yview)
         scroll_x = ttk.Scrollbar(table_frame, orient="horizontal", command=self.biseccion_tabla.xview)
@@ -1184,8 +1213,8 @@ class VentanaPrincipal:
             self.biseccion_tabla.insert("", tk.END, iid=str(indice), values=(
                 fila.numero, self._numero_biseccion(fila.a), self._numero_biseccion(fila.b),
                 self._numero_biseccion(fila.c), self._numero_biseccion(fila.fa),
-                self._numero_biseccion(fila.fc), fila.signo_producto,
-                "—" if fila.error_relativo is None else f"{fila.error_relativo:.6g}",
+                self._numero_biseccion(fila.fb), self._numero_biseccion(fila.fc),
+                fila.signo_producto, self._numero_biseccion(abs(fila.fc)),
             ), tags=("ultima",) if indice == len(resultado.iteraciones) - 1 else ())
         self.biseccion_selector["values"] = tuple(
             f"Iteración {fila.numero}" for fila in resultado.iteraciones
@@ -1397,8 +1426,8 @@ class VentanaPrincipal:
 
         btn_fs_rom = tk.Button(
             wrap_rom_res.bar, text=" ⛶ PANTALLA COMPLETA ", font=F_SMALL,
-            bg="#061a36", fg=C_NEON, activebackground=C_ACCENT,
-            activeforeground=C_WHITE, bd=0, relief="flat", cursor="hand2", padx=8, pady=1,
+            bg=C_SECTION, fg=C_WHITE, activebackground=C_HEADER,
+            activeforeground=C_WHITE, bd=0, relief="flat", cursor="hand2", padx=10, pady=3,
             command=lambda: self.abrir_consola_fullscreen(
                 "NÚMEROS ROMANOS · INFORME COMPLETO",
                 self._obtener_resumen_romanos_texto
@@ -1419,7 +1448,7 @@ class VentanaPrincipal:
         # Resultado en Romano — texto grande centrado
         self.lbl_res_romano = tk.Label(
             self.tab_res_romanos, text="—",
-            font=("JetBrains Mono", 28, "bold"),
+            font=("Consolas", 28, "bold"),
             bg=C_SECTION, fg=C_NEON,
             anchor="center"
         )
@@ -1428,7 +1457,7 @@ class VentanaPrincipal:
         # Resultado en Árabe — texto grande centrado
         self.lbl_res_normal = tk.Label(
             self.tab_res_normales, text="—",
-            font=("JetBrains Mono", 28, "bold"),
+            font=("Consolas", 28, "bold"),
             bg=C_SECTION, fg=C_WHITE,
             anchor="center"
         )
@@ -1575,14 +1604,14 @@ class VentanaPrincipal:
         tk.Label(body, text=msg1, font=F_LABEL, bg=C_SECTION, fg=C_WHITE, justify=tk.LEFT).pack(anchor="w", pady=(0, 10))
 
         # Panel destacado con el tiempo estimado
-        box_tiempo = tk.Frame(body, bg="#061933", padx=12, pady=8,
+        box_tiempo = tk.Frame(body, bg=C_HEADER, padx=12, pady=8,
                               highlightthickness=1, highlightbackground=C_ACCENT)
         box_tiempo.pack(fill=tk.X, pady=(0, 10))
 
         tk.Label(box_tiempo, text="⏱  TIEMPO PROMEDIO ESTIMADO:",
-                 font=F_LABEL, bg="#061933", fg=C_NEON).pack(anchor="w")
+                 font=F_LABEL, bg=C_HEADER, fg=C_GLOW).pack(anchor="w")
         tk.Label(box_tiempo, text=f"    {tiempo_str.upper()}",
-                 font=F_MONO_LG, bg="#061933", fg=C_WHITE).pack(anchor="w", pady=(2, 0))
+                 font=F_MONO_LG, bg=C_HEADER, fg=C_WHITE).pack(anchor="w", pady=(2, 0))
 
         tk.Label(body, text="¿Desea confirmar y proceder con el cálculo o cancelar la operación?",
                  font=F_LABEL, bg=C_SECTION, fg=C_SILVER).pack(anchor="w")
@@ -1605,14 +1634,14 @@ class VentanaPrincipal:
 
         btn_cancel = tk.Button(
             btn_bar, text="  ✕  CANCELAR  ", font=F_MONO_B,
-            bg=C_HEADER, fg=C_SILVER, activebackground="#1e293b", activeforeground=C_WHITE,
+            bg=C_SECTION, fg=C_WHITE, activebackground=C_HEADER, activeforeground=C_WHITE,
             bd=0, relief="flat", cursor="hand2", padx=18, pady=7, command=on_cancelar
         )
         btn_cancel.pack(side=tk.RIGHT, padx=(8, 0))
 
         btn_ok = tk.Button(
             btn_bar, text="  ✔  CONFIRMAR  ", font=F_MONO_B,
-            bg=C_ACCENT, fg=C_WHITE, activebackground=C_BRIGHT, activeforeground=C_WHITE,
+            bg=C_ACCENT, fg="#FFFDF9", activebackground=C_GLOW, activeforeground="#FFFDF9",
             bd=0, relief="flat", cursor="hand2", padx=20, pady=7, command=on_confirmar
         )
         btn_ok.pack(side=tk.RIGHT)
