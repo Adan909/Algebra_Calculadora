@@ -1718,6 +1718,7 @@ class VentanaPrincipal:
             self.biseccion_selector.current(idx_combo)
             self._mostrar_iteracion_biseccion(indice_iter)
             self.biseccion_tabla.selection_set(str(indice_iter))
+            self.biseccion_tabla.see(str(indice_iter))
         else:
             if getattr(resultado, "continuidad", None):
                 self.biseccion_selector.current(0)
@@ -1773,6 +1774,7 @@ class VentanaPrincipal:
                 if 0 <= indice < len(self._resultado_biseccion.iteraciones):
                     self._mostrar_iteracion_biseccion(indice)
                     self.biseccion_tabla.selection_set(str(indice))
+                    self.biseccion_tabla.see(str(indice))
                     self._dibujar_grafica_biseccion()
 
     def _seleccionar_fila_biseccion(self, _event=None):
@@ -1783,6 +1785,7 @@ class VentanaPrincipal:
             if 0 <= indice + offset < len(self.biseccion_selector["values"]):
                 self.biseccion_selector.current(indice + offset)
             self._mostrar_iteracion_biseccion(indice)
+            self.biseccion_tabla.see(str(indice))
             self._dibujar_grafica_biseccion()
 
     def _mostrar_iteracion_biseccion(self, indice):

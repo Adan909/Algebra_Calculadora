@@ -4,6 +4,48 @@ from modelo.biseccion import FuncionMatematica, biseccion, verificar_continuidad
 
 
 class PruebasBiseccion(unittest.TestCase):
+    def test_ultima_iteracion_seleccionada_permanece_visible(self):
+        import tkinter as tk
+        from controlador.controlador import Controlador
+
+        root = tk.Tk()
+        root.geometry("1280x880")
+        try:
+            app = Controlador(root)
+            vista = app.vista
+            vista.nb_main.select(vista.tab_biseccion)
+            root.update()
+
+            for campo, valor in (
+                (vista.biseccion_funcion, "x^2 - 2"),
+                (vista.biseccion_a, "1"),
+                (vista.biseccion_b, "2"),
+                (vista.biseccion_error, "0.0000001"),
+                (vista.biseccion_max_iter, "100"),
+            ):
+                campo.delete(0, tk.END)
+                campo.insert(0, valor)
+
+            app.calcular_biseccion()
+            root.update()
+
+            seleccion = vista.biseccion_tabla.selection()
+            self.assertTrue(seleccion)
+            self.assertTrue(vista.biseccion_tabla.bbox(seleccion[0]))
+            self.assertIn("Intervalo actual:", vista.biseccion_explicacion.cget("text"))
+            self.assertIn("Punto medio:", vista.biseccion_explicacion.cget("text"))
+
+            primera = vista._resultado_biseccion.iteraciones[0]
+            vista.biseccion_selector.current(1)
+            vista._seleccionar_iteracion_biseccion()
+            root.update()
+            self.assertEqual(vista.biseccion_tabla.selection(), ("0",))
+            self.assertTrue(vista.biseccion_tabla.bbox("0"))
+            self.assertIn(f"Punto medio: c = (a + b) / 2 = {primera.c:.10g}",
+                          vista.biseccion_explicacion.cget("text"))
+        finally:
+            root.destroy()
+
     # Confirma que el ejemplo de la guía se calcula con siete pasos y el error esperado.
     def test_ejemplo_del_profesor(self):
         resultado = biseccion(
