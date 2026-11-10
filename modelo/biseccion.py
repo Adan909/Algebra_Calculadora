@@ -33,16 +33,22 @@ class FuncionMatematica:
     FUNCIONES = {
         "abs": abs,
         "acos": math.acos,
+        "arccos": math.acos,
         "asin": math.asin,
+        "arcsin": math.asin,
         "atan": math.atan,
+        "arctan": math.atan,
         "cos": math.cos,
         "exp": math.exp,
         "floor": math.floor,
+        "ln": math.log,
         "log": math.log,
         "log10": math.log10,
+        "sen": math.sin,
         "sin": math.sin,
         "sqrt": math.sqrt,
         "tan": math.tan,
+        "tg": math.tan,
     }
 
     OPERADORES = {
@@ -165,9 +171,9 @@ class FuncionMatematica:
             tipos.append("Racional (con asíntotas o polos potenciales)")
         if "sqrt" in nombres_funcs or tiene_potencia_no_entera:
             tipos.append("Radical / Potencia no entera (dominio restringido)")
-        if any(f in nombres_funcs for f in ("sin", "cos", "tan", "asin", "acos", "atan")):
+        if any(f in nombres_funcs for f in ("sin", "sen", "cos", "tan", "tg", "asin", "arcsin", "acos", "arccos", "atan", "arctan")):
             tipos.append("Trigonométrica")
-        if any(f in nombres_funcs for f in ("exp", "log", "log10")) or tiene_x_en_exponente:
+        if any(f in nombres_funcs for f in ("exp", "log", "ln", "log10")) or tiene_x_en_exponente:
             tipos.append("Exponencial / Logarítmica")
 
         if not tipos:

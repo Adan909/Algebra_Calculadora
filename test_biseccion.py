@@ -149,6 +149,37 @@ class PruebasBiseccion(unittest.TestCase):
             with self.subTest(args=args), self.assertRaises(ValueError):
                 biseccion(*args)
 
+    # Prueba funciones trigonométricas y logarítmicas en Regla Falsa y Bisección
+    def test_trigonometricas_y_logaritmos(self):
+        from modelo.regula_falsi import calcular_regula_falsi
+
+        # 1. Logaritmo natural con ln(x) y log(x)
+        f_ln = FuncionMatematica("ln(x) - 1")
+        res_rf_ln = calcular_regula_falsi(f_ln, 2.0, 3.0, 0.001, 100)
+        self.assertTrue(res_rf_ln.convergio)
+        self.assertAlmostEqual(res_rf_ln.raiz, 2.71828, places=3)
+
+        f_log = FuncionMatematica("log(x) - 1")
+        res_rf_log = calcular_regula_falsi(f_log, 2.0, 3.0, 0.001, 100)
+        self.assertTrue(res_rf_log.convergio)
+        self.assertAlmostEqual(res_rf_log.raiz, 2.71828, places=3)
+
+        # 2. Funciones trigonométricas con sin/sen, cos, tan/tg
+        f_sen = FuncionMatematica("sen(x)")
+        res_rf_sen = calcular_regula_falsi(f_sen, 3.0, 4.0, 0.001, 100)
+        self.assertTrue(res_rf_sen.convergio)
+        self.assertAlmostEqual(res_rf_sen.raiz, 3.14159, places=3)
+
+        f_cos = FuncionMatematica("cos(x) - x")
+        res_rf_cos = calcular_regula_falsi(f_cos, 0.5, 1.0, 0.001, 100)
+        self.assertTrue(res_rf_cos.convergio)
+        self.assertAlmostEqual(res_rf_cos.raiz, 0.73908, places=3)
+
+        f_tg = FuncionMatematica("tg(x) - 1")
+        res_rf_tg = calcular_regula_falsi(f_tg, 0.5, 1.0, 0.001, 100)
+        self.assertTrue(res_rf_tg.convergio)
+        self.assertAlmostEqual(res_rf_tg.raiz, 0.78539, places=3)
+
     # Informa falta de convergencia si se agota el límite antes de alcanzar la tolerancia.
     def test_maximo_de_iteraciones_informa_no_convergencia(self):
         resultado = biseccion("x^2 - 2", 1, 2, 1e-12, 1)
