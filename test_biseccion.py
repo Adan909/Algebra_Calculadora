@@ -14,7 +14,7 @@ class PruebasBiseccion(unittest.TestCase):
             app = Controlador(root)
             vista = app.vista
             vista.nb_main.select(vista.tab_biseccion)
-            root.update()
+            root.update_idletasks()
 
             for campo, valor in (
                 (vista.biseccion_funcion, "x^2 - 2"),
@@ -27,7 +27,7 @@ class PruebasBiseccion(unittest.TestCase):
                 campo.insert(0, valor)
 
             app.calcular_biseccion()
-            root.update()
+            root.update_idletasks()
 
             seleccion = vista.biseccion_tabla.selection()
             self.assertTrue(seleccion)
@@ -38,12 +38,14 @@ class PruebasBiseccion(unittest.TestCase):
             primera = vista._resultado_biseccion.iteraciones[0]
             vista.biseccion_selector.current(1)
             vista._seleccionar_iteracion_biseccion()
-            root.update()
+            root.update_idletasks()
             self.assertEqual(vista.biseccion_tabla.selection(), ("0",))
             self.assertTrue(vista.biseccion_tabla.bbox("0"))
             self.assertIn(f"Punto medio: c = (a + b) / 2 = {primera.c:.10g}",
                           vista.biseccion_explicacion.cget("text"))
         finally:
+            for callback in root.tk.call("after", "info"):
+                root.after_cancel(callback)
             root.destroy()
 
     # Confirma que el ejemplo de la guía se calcula con siete pasos y el error esperado.

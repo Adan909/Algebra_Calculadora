@@ -6,6 +6,7 @@ y con un flujo de trabajo optimizado para herramientas científicas y educativas
 
 import tkinter as tk
 from tkinter import ttk, messagebox
+import math
 import time
 import re
 from fractions import Fraction
@@ -304,6 +305,9 @@ class VentanaPrincipal:
             estado["bis_res"] = getattr(self, "_resultado_biseccion", None)
             estado["bis_func_obj"] = getattr(self, "_funcion_grafica_biseccion", None)
             estado["bis_zoom"] = getattr(self, "_zoom_biseccion", 1.0)
+            estado["bis_root_idx"] = getattr(self, "_raiz_actual_biseccion", None)
+            estado["bis_pan_x"] = getattr(self, "_desplazamiento_x_biseccion", 0.0)
+            estado["bis_pan_y"] = getattr(self, "_desplazamiento_y_biseccion", 0.0)
             
             # Regla Falsa
             estado["rf_func"] = self.rf_funcion.get() if hasattr(self, "rf_funcion") else ""
@@ -314,6 +318,9 @@ class VentanaPrincipal:
             estado["rf_res"] = getattr(self, "_resultado_rf", None)
             estado["rf_func_obj"] = getattr(self, "_funcion_grafica_rf", None)
             estado["rf_zoom"] = getattr(self, "_zoom_rf", 1.0)
+            estado["rf_root_idx"] = getattr(self, "_raiz_actual_rf", None)
+            estado["rf_pan_x"] = getattr(self, "_desplazamiento_x_rf", 0.0)
+            estado["rf_pan_y"] = getattr(self, "_desplazamiento_y_rf", 0.0)
         except Exception:
             pass
         return estado
@@ -442,10 +449,20 @@ class VentanaPrincipal:
                 if estado.get("bis_res") and estado.get("bis_func_obj"):
                     self.mostrar_resultado_biseccion(estado["bis_res"], estado["bis_func_obj"])
                     self._zoom_biseccion = estado.get("bis_zoom", 1.0)
+                    indice_raiz = estado.get("bis_root_idx")
+                    if indice_raiz is not None and 0 <= indice_raiz < len(self._raices_biseccion):
+                        self._mostrar_raiz_biseccion(indice_raiz)
+                    self._desplazamiento_x_biseccion = estado.get("bis_pan_x", 0.0)
+                    self._desplazamiento_y_biseccion = estado.get("bis_pan_y", 0.0)
                     self._dibujar_grafica_biseccion()
                 elif estado.get("bis_func_obj"):
                     self.mostrar_grafica_biseccion(estado["bis_func_obj"])
                     self._zoom_biseccion = estado.get("bis_zoom", 1.0)
+                    indice_raiz = estado.get("bis_root_idx")
+                    if indice_raiz is not None and 0 <= indice_raiz < len(self._raices_biseccion):
+                        self._mostrar_raiz_biseccion(indice_raiz)
+                    self._desplazamiento_x_biseccion = estado.get("bis_pan_x", 0.0)
+                    self._desplazamiento_y_biseccion = estado.get("bis_pan_y", 0.0)
                     self._dibujar_grafica_biseccion()
                     
             # Restaurar Regla Falsa
@@ -462,11 +479,21 @@ class VentanaPrincipal:
                 self.rf_max_iter.insert(0, estado.get("rf_max", ""))
                 if estado.get("rf_res") and estado.get("rf_func_obj"):
                     self.mostrar_resultado_rf(estado["rf_res"], estado["rf_func_obj"])
+                    self._zoom_rf = estado.get("rf_zoom", 1.0)
+                    indice_raiz = estado.get("rf_root_idx")
+                    if indice_raiz is not None and 0 <= indice_raiz < len(self._raices_rf):
+                        self._mostrar_raiz_rf(indice_raiz)
+                    self._desplazamiento_x_rf = estado.get("rf_pan_x", 0.0)
+                    self._desplazamiento_y_rf = estado.get("rf_pan_y", 0.0)
+                    self._dibujar_grafica_rf()
                 elif estado.get("rf_func_obj"):
                     self.mostrar_grafica_rf(estado["rf_func_obj"])
                     self._zoom_rf = estado.get("rf_zoom", 1.0)
-                    self._dibujar_grafica_rf()
-                    self._zoom_rf = estado.get("rf_zoom", 1.0)
+                    indice_raiz = estado.get("rf_root_idx")
+                    if indice_raiz is not None and 0 <= indice_raiz < len(self._raices_rf):
+                        self._mostrar_raiz_rf(indice_raiz)
+                    self._desplazamiento_x_rf = estado.get("rf_pan_x", 0.0)
+                    self._desplazamiento_y_rf = estado.get("rf_pan_y", 0.0)
                     self._dibujar_grafica_rf()
 
             # Seleccionar pestaña principal
@@ -1592,6 +1619,7 @@ class VentanaPrincipal:
         summary.pack(fill=tk.X, pady=(0, 8))
 
         self.biseccion_raiz = self._biseccion_metric(summary, "Raíz Aproximada", "—", ACCENT_PRIMARY)
+        self.biseccion_cantidad_raices = self._biseccion_metric(summary, "Raíces reales distintas", "—", TEXT_PRIMARY)
         self.biseccion_error_final = self._biseccion_metric(summary, "Error Relativo Final", "—", TEXT_PRIMARY)
         self.biseccion_iteraciones_total = self._biseccion_metric(summary, "Iteraciones", "—", TEXT_PRIMARY)
         self.biseccion_continuidad = self._biseccion_metric(summary, "Continuidad [a, b]", "—", TEXT_MUTED)
@@ -1600,8 +1628,26 @@ class VentanaPrincipal:
         work = tk.Frame(parent, bg=BG_WINDOW)
         work.pack(fill=tk.BOTH, expand=True, pady=(0, 8))
 
-        t_graf = Tarjeta(work, titulo="Gráfica Interactiva", subtitulo="Comportamiento de f(x) y subintervalo · Rueda del ratón para zoom")
+        t_graf = Tarjeta(work, titulo="Gráfica Interactiva", subtitulo="Arrastra para recorrer el plano · Rueda para zoom · Doble clic para restablecer")
         t_graf.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 6))
+
+        navegacion_raices = tk.Frame(t_graf.contenido, bg=BG_CARD)
+        navegacion_raices.pack(fill=tk.X, pady=(0, 4))
+        self.biseccion_raiz_anterior = BotonSecundario(
+            navegacion_raices, text="◀", command=lambda: self._navegar_raiz_biseccion(-1),
+            font=FONT_SMALL_BOLD, padx=8, pady=2, state=tk.DISABLED,
+        )
+        self.biseccion_raiz_anterior.pack(side=tk.LEFT, padx=(0, 4))
+        self.biseccion_raiz_seleccionada = tk.Label(
+            navegacion_raices, text="Conteo numérico disponible solo para polinomios",
+            font=FONT_SMALL, bg=BG_CARD, fg=TEXT_SECONDARY, anchor="w",
+        )
+        self.biseccion_raiz_seleccionada.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self.biseccion_raiz_siguiente = BotonSecundario(
+            navegacion_raices, text="▶", command=lambda: self._navegar_raiz_biseccion(1),
+            font=FONT_SMALL_BOLD, padx=8, pady=2, state=tk.DISABLED,
+        )
+        self.biseccion_raiz_siguiente.pack(side=tk.RIGHT, padx=(4, 0))
 
         self.biseccion_canvas = tk.Canvas(t_graf.contenido, height=220, bg=BG_CARD, highlightthickness=0, bd=0)
         self.biseccion_canvas.pack(fill=tk.BOTH, expand=True)
@@ -1609,12 +1655,22 @@ class VentanaPrincipal:
         self.biseccion_canvas.bind("<MouseWheel>", self._zoom_grafica_biseccion)
         self.biseccion_canvas.bind("<Button-4>", self._zoom_grafica_biseccion)
         self.biseccion_canvas.bind("<Button-5>", self._zoom_grafica_biseccion)
+        self.biseccion_canvas.bind("<ButtonPress-1>", self._iniciar_pan_grafica_biseccion)
+        self.biseccion_canvas.bind("<B1-Motion>", self._mover_grafica_biseccion)
+        self.biseccion_canvas.bind("<ButtonRelease-1>", self._terminar_pan_grafica_biseccion)
         self.biseccion_canvas.bind("<Double-Button-1>", self._reset_zoom_biseccion)
         self._funcion_grafica_biseccion = None
         self._resultado_biseccion = None
         self._iteracion_seleccionada = None
         self._rango_grafica_biseccion = None
+        self._raices_biseccion = ()
+        self._raiz_actual_biseccion = None
         self._zoom_biseccion = 1.0
+        self._desplazamiento_x_biseccion = 0.0
+        self._desplazamiento_y_biseccion = 0.0
+        self._escala_x_pan_biseccion = 1.0
+        self._escala_y_pan_biseccion = 1.0
+        self._inicio_pan_biseccion = None
 
         t_exp = Tarjeta(work, titulo="Lectura del Procedimiento", subtitulo="Detalle paso a paso del intervalo")
         t_exp.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(6, 0))
@@ -1677,6 +1733,9 @@ class VentanaPrincipal:
         self._resultado_biseccion = resultado
         self._funcion_grafica_biseccion = funcion
         self._rango_grafica_biseccion = None
+        self._desplazamiento_x_biseccion = 0.0
+        self._desplazamiento_y_biseccion = 0.0
+        self._actualizar_raices_biseccion(funcion)
         self._zoom_biseccion = 1.0
         self.biseccion_raiz.config(text=f"{resultado.raiz:.10g}")
         self.biseccion_error_final.config(
@@ -1733,7 +1792,65 @@ class VentanaPrincipal:
         self._funcion_grafica_biseccion = funcion
         self._rango_grafica_biseccion = (-2.0, 2.0)
         self._iteracion_seleccionada = None
+        self._desplazamiento_x_biseccion = 0.0
+        self._desplazamiento_y_biseccion = 0.0
+        self._actualizar_raices_biseccion(funcion)
         self._zoom_biseccion = 1.0
+        self._dibujar_grafica_biseccion()
+
+    def _actualizar_raices_biseccion(self, funcion):
+        from modelo.raices_polinomiales import encontrar_raices_reales
+
+        self._raiz_actual_biseccion = None
+        try:
+            analisis = encontrar_raices_reales(funcion)
+        except OverflowError as error:
+            self._raices_biseccion = ()
+            self.biseccion_cantidad_raices.config(text="Error")
+            self.biseccion_raiz_seleccionada.config(text=str(error))
+            self.biseccion_raiz_anterior.config(state=tk.DISABLED)
+            self.biseccion_raiz_siguiente.config(state=tk.DISABLED)
+            return
+        if analisis is None:
+            self._raices_biseccion = ()
+            self.biseccion_cantidad_raices.config(text="N/D")
+            self.biseccion_raiz_seleccionada.config(
+                text="Conteo numérico total disponible solo para polinomios."
+            )
+        elif analisis.raices is None:
+            self._raices_biseccion = ()
+            self.biseccion_cantidad_raices.config(text="∞")
+            self.biseccion_raiz_seleccionada.config(text="f(x) = 0: todo número real es raíz.")
+        else:
+            self._raices_biseccion = analisis.raices
+            self.biseccion_cantidad_raices.config(text=str(len(self._raices_biseccion)))
+            self.biseccion_raiz_seleccionada.config(
+                text="Usa las flechas para mostrar una raíz en la gráfica."
+                if self._raices_biseccion else "El polinomio no tiene raíces reales."
+            )
+        estado = tk.NORMAL if self._raices_biseccion else tk.DISABLED
+        self.biseccion_raiz_anterior.config(state=estado)
+        self.biseccion_raiz_siguiente.config(state=estado)
+
+    def _navegar_raiz_biseccion(self, direccion):
+        if not self._raices_biseccion:
+            return
+        if self._raiz_actual_biseccion is None:
+            indice = 0 if direccion > 0 else len(self._raices_biseccion) - 1
+        else:
+            indice = (self._raiz_actual_biseccion + direccion) % len(self._raices_biseccion)
+        self._mostrar_raiz_biseccion(indice)
+
+    def _mostrar_raiz_biseccion(self, indice):
+        self._raiz_actual_biseccion = indice
+        raiz = self._raices_biseccion[indice]
+        radio = max(1.0, abs(raiz) * 0.1)
+        self._rango_grafica_biseccion = (raiz - radio, raiz + radio)
+        self._desplazamiento_x_biseccion = 0.0
+        self._desplazamiento_y_biseccion = 0.0
+        self.biseccion_raiz_seleccionada.config(
+            text=f"Raíz {indice + 1}/{len(self._raices_biseccion)} · x ≈ {raiz:.10g}"
+        )
         self._dibujar_grafica_biseccion()
 
     def _mostrar_explicacion_continuidad(self):
@@ -1760,6 +1877,14 @@ class VentanaPrincipal:
         val = self.biseccion_selector.get()
         if not val or not self._resultado_biseccion:
             return
+        self._raiz_actual_biseccion = None
+        self._rango_grafica_biseccion = None
+        self._desplazamiento_x_biseccion = 0.0
+        self._desplazamiento_y_biseccion = 0.0
+        if self._raices_biseccion:
+            self.biseccion_raiz_seleccionada.config(
+                text="Usa las flechas para mostrar una raíz en la gráfica."
+            )
         if "Demostración de Continuidad" in val:
             self._mostrar_explicacion_continuidad()
             for item in self.biseccion_tabla.selection():
@@ -1780,6 +1905,14 @@ class VentanaPrincipal:
     def _seleccionar_fila_biseccion(self, _event=None):
         seleccion = self.biseccion_tabla.selection()
         if seleccion and self._resultado_biseccion:
+            self._raiz_actual_biseccion = None
+            self._rango_grafica_biseccion = None
+            self._desplazamiento_x_biseccion = 0.0
+            self._desplazamiento_y_biseccion = 0.0
+            if self._raices_biseccion:
+                self.biseccion_raiz_seleccionada.config(
+                    text="Usa las flechas para mostrar una raíz en la gráfica."
+                )
             indice = int(seleccion[0])
             offset = 1 if getattr(self._resultado_biseccion, "continuidad", None) else 0
             if 0 <= indice + offset < len(self.biseccion_selector["values"]):
@@ -1925,10 +2058,97 @@ class VentanaPrincipal:
             self._dibujar_grafica_biseccion()
         return "break"
 
+    def _iniciar_pan_grafica_biseccion(self, event):
+        self._inicio_pan_biseccion = (
+            event.x, event.y, self._desplazamiento_x_biseccion,
+            self._desplazamiento_y_biseccion,
+        )
+        self.biseccion_canvas.configure(cursor="fleur")
+
+    def _mover_grafica_biseccion(self, event):
+        if self._inicio_pan_biseccion is None:
+            return
+        x_inicio, y_inicio, pan_x, pan_y = self._inicio_pan_biseccion
+        ancho = max(1, self.biseccion_canvas.winfo_width() - 72)
+        alto = max(1, self.biseccion_canvas.winfo_height() - 56)
+        self._desplazamiento_x_biseccion = (
+            pan_x - (event.x - x_inicio) * self._escala_x_pan_biseccion / ancho
+        )
+        self._desplazamiento_y_biseccion = (
+            pan_y + (event.y - y_inicio) * self._escala_y_pan_biseccion / alto
+        )
+        self._dibujar_grafica_biseccion()
+
+    def _terminar_pan_grafica_biseccion(self, _event=None):
+        self._inicio_pan_biseccion = None
+        self.biseccion_canvas.configure(cursor="")
+
     def _reset_zoom_biseccion(self, _event=None):
         self._zoom_biseccion = 1.0
+        self._desplazamiento_x_biseccion = 0.0
+        self._desplazamiento_y_biseccion = 0.0
         self._dibujar_grafica_biseccion()
         return "break"
+
+    @staticmethod
+    def _limites_verticales_grafica(valores):
+        ordenados = sorted(valores)
+        if len(ordenados) >= 100:
+            margen = max(1, len(ordenados) // 100)
+            minimo, maximo = ordenados[margen], ordenados[-margen - 1]
+        else:
+            minimo, maximo = ordenados[0], ordenados[-1]
+        if minimo == maximo:
+            minimo, maximo = minimo - 1, maximo + 1
+        padding = (maximo - minimo) * 0.12
+        return minimo - padding, maximo + padding
+
+    @staticmethod
+    def _es_valor_grafica_valido(valor):
+        return isinstance(valor, (int, float)) and math.isfinite(valor) and abs(valor) <= 1e100
+
+    @staticmethod
+    def _segmentos_visibles_grafica(points, ymin, ymax):
+        segmentos = []
+        segmento = []
+        anterior = None
+
+        def cerrar_segmento():
+            nonlocal segmento
+            if len(segmento) > 1:
+                segmentos.append(segmento)
+            segmento = []
+
+        for punto in points:
+            if punto is None:
+                cerrar_segmento()
+                anterior = None
+                continue
+            dentro = ymin <= punto[1] <= ymax
+            if anterior is not None:
+                anterior_dentro = ymin <= anterior[1] <= ymax
+                if anterior_dentro and not dentro:
+                    limite = ymin if punto[1] < ymin else ymax
+                    proporcion = (limite - anterior[1]) / (punto[1] - anterior[1])
+                    segmento.append((
+                        anterior[0] + proporcion * (punto[0] - anterior[0]), limite
+                    ))
+                    cerrar_segmento()
+                elif not anterior_dentro and dentro:
+                    limite = ymin if anterior[1] < ymin else ymax
+                    proporcion = (limite - anterior[1]) / (punto[1] - anterior[1])
+                    segmento = [(
+                        anterior[0] + proporcion * (punto[0] - anterior[0]), limite
+                    ), punto]
+                elif dentro:
+                    segmento.append(punto)
+                else:
+                    cerrar_segmento()
+            elif dentro:
+                segmento.append(punto)
+            anterior = punto
+        cerrar_segmento()
+        return segmentos
 
     def _dibujar_grafica_biseccion(self):
         canvas = getattr(self, "biseccion_canvas", None)
@@ -1940,6 +2160,10 @@ class VentanaPrincipal:
             return
         left, right, top, bottom = 54, width - 18, 18, height - 38
         selected = self._iteracion_seleccionada
+        raiz_seleccionada = (
+            self._raices_biseccion[self._raiz_actual_biseccion]
+            if self._raiz_actual_biseccion is not None else None
+        )
         graph_range = self._rango_grafica_biseccion
         if graph_range is not None:
             xmin, xmax = graph_range
@@ -1957,16 +2181,19 @@ class VentanaPrincipal:
         span_total = (span * 1.7) / zoom
         xmin = centro - span_total / 2.0
         xmax = centro + span_total / 2.0
+        xmin += self._desplazamiento_x_biseccion
+        xmax += self._desplazamiento_x_biseccion
+        self._escala_x_pan_biseccion = xmax - xmin
 
         function = self._funcion_grafica_biseccion
         points = []
         if function:
-            samples = 240
+            samples = max(240, (right - left) * 2)
             for index in range(samples + 1):
                 x = xmin + (xmax - xmin) * index / samples
                 try:
                     y = function.evaluar(x)
-                    if abs(y) > 1e8:
+                    if not self._es_valor_grafica_valido(y):
                         points.append(None)
                     else:
                         points.append((x, y))
@@ -1975,11 +2202,13 @@ class VentanaPrincipal:
         values = [point[1] for point in points if point is not None]
         if selected:
             values.extend((selected.fa, selected.fc))
-        ymin, ymax = (min(values), max(values)) if values else (-1.0, 1.0)
-        if ymin == ymax:
-            ymin, ymax = ymin - 1, ymax + 1
-        padding = (ymax - ymin) * 0.12
-        ymin, ymax = ymin - padding, ymax + padding
+        if raiz_seleccionada is not None:
+            values.append(0.0)
+        ymin, ymax = self._limites_verticales_grafica(values) if values else (-1.0, 1.0)
+        span_y = ymax - ymin
+        ymin -= self._desplazamiento_y_biseccion
+        ymax -= self._desplazamiento_y_biseccion
+        self._escala_y_pan_biseccion = span_y
         to_x = lambda x: left + (x - xmin) / (xmax - xmin) * (right - left)
         to_y = lambda y: bottom - (y - ymin) / (ymax - ymin) * (bottom - top)
 
@@ -1991,20 +2220,29 @@ class VentanaPrincipal:
             canvas.create_text(to_x(x), bottom + 15, text=f"{x:.4g}", fill=TEXT_MUTED, font=FONT_SMALL)
             canvas.create_text(left - 8, to_y(y), text=f"{y:.4g}", fill=TEXT_MUTED, font=FONT_SMALL, anchor="e")
         if ymin <= 0 <= ymax:
-            canvas.create_line(left, to_y(0), right, to_y(0), fill=TEXT_MUTED, width=1)
-        canvas.create_line(left, top, left, bottom, fill=TEXT_MUTED)
-        canvas.create_line(left, bottom, right, bottom, fill=TEXT_MUTED)
+            canvas.create_line(left, to_y(0), right, to_y(0), fill=TEXT_MUTED, width=1.5)
+        if xmin <= 0 <= xmax:
+            canvas.create_line(to_x(0), top, to_x(0), bottom, fill=TEXT_MUTED, width=1.5)
+        canvas.create_rectangle(left, top, right, bottom, outline=TEXT_MUTED)
 
-        segment = []
-        for point in points + [None]:
-            if point is None:
-                if len(segment) > 1:
-                    coords = [coordinate for x, y in segment for coordinate in (to_x(x), to_y(y))]
-                    canvas.create_line(*coords, fill=ACCENT_PRIMARY, width=2, smooth=True)
-                segment = []
-            else:
-                segment.append(point)
+        for segment in self._segmentos_visibles_grafica(points, ymin, ymax):
+            coords = [coordinate for x, y in segment for coordinate in (to_x(x), to_y(y))]
+            canvas.create_line(*coords, fill=ACCENT_PRIMARY, width=2, tags=("function_trace",))
         canvas.create_text(right - 4, top + 8, text="f(x)", fill=ACCENT_PRIMARY, font=FONT_SMALL_BOLD, anchor="e")
+        if raiz_seleccionada is not None and xmin <= raiz_seleccionada <= xmax:
+            x_raiz, y_raiz = to_x(raiz_seleccionada), to_y(0.0)
+            canvas.create_line(
+                x_raiz, top, x_raiz, bottom, fill=SUCCESS_TEXT, dash=(3, 3),
+                tags=("selected_root",),
+            )
+            canvas.create_oval(
+                x_raiz - 5, y_raiz - 5, x_raiz + 5, y_raiz + 5,
+                fill=SUCCESS_TEXT, outline=BG_CARD, width=1, tags=("selected_root",),
+            )
+            canvas.create_text(
+                x_raiz, top + 18, text=f"Raíz {self._raiz_actual_biseccion + 1}",
+                fill=SUCCESS_TEXT, font=FONT_SMALL_BOLD, tags=("selected_root",),
+            )
         if abs(zoom - 1.0) > 1e-4:
             canvas.create_text(left + 6, top + 8, text=f"Escala: {zoom:.2g}x", fill=TEXT_MUTED, font=FONT_MICRO, anchor="w")
 
@@ -2030,11 +2268,20 @@ class VentanaPrincipal:
         self.biseccion_iteraciones_total.config(text="—")
         self.biseccion_continuidad.config(text="—", fg=TEXT_MUTED)
         self.biseccion_estado.config(text="Esperando datos", fg=TEXT_MUTED)
+        self.biseccion_cantidad_raices.config(text="—")
+        self.biseccion_raiz_seleccionada.config(text="Conteo numérico disponible solo para polinomios")
+        self.biseccion_raiz_anterior.config(state=tk.DISABLED)
+        self.biseccion_raiz_siguiente.config(state=tk.DISABLED)
         self._resultado_biseccion = None
         self._funcion_grafica_biseccion = None
         self._iteracion_seleccionada = None
         self._rango_grafica_biseccion = None
+        self._raices_biseccion = ()
+        self._raiz_actual_biseccion = None
         self._zoom_biseccion = 1.0
+        self._desplazamiento_x_biseccion = 0.0
+        self._desplazamiento_y_biseccion = 0.0
+        self._inicio_pan_biseccion = None
         self.biseccion_selector["values"] = ()
         self.biseccion_selector.set("")
         for item in self.biseccion_tabla.get_children():
@@ -2165,6 +2412,7 @@ class VentanaPrincipal:
         summary.pack(fill=tk.X, pady=(0, 8))
 
         self.rf_raiz = self._biseccion_metric(summary, "Raíz Aproximada", "—", ACCENT_PRIMARY)
+        self.rf_cantidad_raices = self._biseccion_metric(summary, "Raíces reales distintas", "—", TEXT_PRIMARY)
         self.rf_error_final = self._biseccion_metric(summary, "Error Relativo Final", "—", TEXT_PRIMARY)
         self.rf_iteraciones_total = self._biseccion_metric(summary, "Iteraciones", "—", TEXT_PRIMARY)
         self.rf_continuidad = self._biseccion_metric(summary, "Continuidad [a, b]", "—", TEXT_MUTED)
@@ -2173,8 +2421,26 @@ class VentanaPrincipal:
         work = tk.Frame(parent, bg=BG_WINDOW)
         work.pack(fill=tk.BOTH, expand=True, pady=(0, 8))
 
-        t_graf = Tarjeta(work, titulo="Gráfica Interactiva", subtitulo="Comportamiento de f(x) y falsa posición · Rueda ratón zoom")
+        t_graf = Tarjeta(work, titulo="Gráfica Interactiva", subtitulo="Arrastra para recorrer el plano · Rueda para zoom · Doble clic para restablecer")
         t_graf.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 6))
+
+        navegacion_raices = tk.Frame(t_graf.contenido, bg=BG_CARD)
+        navegacion_raices.pack(fill=tk.X, pady=(0, 4))
+        self.rf_raiz_anterior = BotonSecundario(
+            navegacion_raices, text="◀", command=lambda: self._navegar_raiz_rf(-1),
+            font=FONT_SMALL_BOLD, padx=8, pady=2, state=tk.DISABLED,
+        )
+        self.rf_raiz_anterior.pack(side=tk.LEFT, padx=(0, 4))
+        self.rf_raiz_seleccionada = tk.Label(
+            navegacion_raices, text="Conteo numérico disponible solo para polinomios",
+            font=FONT_SMALL, bg=BG_CARD, fg=TEXT_SECONDARY, anchor="w",
+        )
+        self.rf_raiz_seleccionada.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self.rf_raiz_siguiente = BotonSecundario(
+            navegacion_raices, text="▶", command=lambda: self._navegar_raiz_rf(1),
+            font=FONT_SMALL_BOLD, padx=8, pady=2, state=tk.DISABLED,
+        )
+        self.rf_raiz_siguiente.pack(side=tk.RIGHT, padx=(4, 0))
 
         self.rf_canvas = tk.Canvas(t_graf.contenido, height=220, bg=BG_CARD, highlightthickness=0, bd=0)
         self.rf_canvas.pack(fill=tk.BOTH, expand=True)
@@ -2182,12 +2448,22 @@ class VentanaPrincipal:
         self.rf_canvas.bind("<MouseWheel>", self._zoom_grafica_rf)
         self.rf_canvas.bind("<Button-4>", self._zoom_grafica_rf)
         self.rf_canvas.bind("<Button-5>", self._zoom_grafica_rf)
+        self.rf_canvas.bind("<ButtonPress-1>", self._iniciar_pan_grafica_rf)
+        self.rf_canvas.bind("<B1-Motion>", self._mover_grafica_rf)
+        self.rf_canvas.bind("<ButtonRelease-1>", self._terminar_pan_grafica_rf)
         self.rf_canvas.bind("<Double-Button-1>", self._reset_zoom_rf)
         self._funcion_grafica_rf = None
         self._resultado_rf = None
         self._iteracion_seleccionada_rf = None
         self._rango_grafica_rf = None
+        self._raices_rf = ()
+        self._raiz_actual_rf = None
         self._zoom_rf = 1.0
+        self._desplazamiento_x_rf = 0.0
+        self._desplazamiento_y_rf = 0.0
+        self._escala_x_pan_rf = 1.0
+        self._escala_y_pan_rf = 1.0
+        self._inicio_pan_rf = None
 
         t_exp = Tarjeta(work, titulo="Lectura del Procedimiento", subtitulo="Detalle paso a paso de Inteligencia Geométrica")
         t_exp.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(6, 0))
@@ -2238,6 +2514,9 @@ class VentanaPrincipal:
         self._resultado_rf = resultado
         self._funcion_grafica_rf = funcion
         self._rango_grafica_rf = None
+        self._desplazamiento_x_rf = 0.0
+        self._desplazamiento_y_rf = 0.0
+        self._actualizar_raices_rf(funcion)
         self._zoom_rf = 1.0
         self.rf_raiz.config(text=f"{resultado.raiz:.10g}")
         self.rf_error_final.config(text="—" if resultado.error_final is None else f"{resultado.error_final:.6g} %")
@@ -2288,7 +2567,63 @@ class VentanaPrincipal:
         self._funcion_grafica_rf = funcion
         self._rango_grafica_rf = (-2.0, 2.0)
         self._iteracion_seleccionada_rf = None
+        self._desplazamiento_x_rf = 0.0
+        self._desplazamiento_y_rf = 0.0
+        self._actualizar_raices_rf(funcion)
         self._zoom_rf = 1.0
+        self._dibujar_grafica_rf()
+
+    def _actualizar_raices_rf(self, funcion):
+        from modelo.raices_polinomiales import encontrar_raices_reales
+
+        self._raiz_actual_rf = None
+        try:
+            analisis = encontrar_raices_reales(funcion)
+        except OverflowError as error:
+            self._raices_rf = ()
+            self.rf_cantidad_raices.config(text="Error")
+            self.rf_raiz_seleccionada.config(text=str(error))
+            self.rf_raiz_anterior.config(state=tk.DISABLED)
+            self.rf_raiz_siguiente.config(state=tk.DISABLED)
+            return
+        if analisis is None:
+            self._raices_rf = ()
+            self.rf_cantidad_raices.config(text="N/D")
+            self.rf_raiz_seleccionada.config(text="Conteo numérico total disponible solo para polinomios.")
+        elif analisis.raices is None:
+            self._raices_rf = ()
+            self.rf_cantidad_raices.config(text="∞")
+            self.rf_raiz_seleccionada.config(text="f(x) = 0: todo número real es raíz.")
+        else:
+            self._raices_rf = analisis.raices
+            self.rf_cantidad_raices.config(text=str(len(self._raices_rf)))
+            self.rf_raiz_seleccionada.config(
+                text="Usa las flechas para mostrar una raíz en la gráfica."
+                if self._raices_rf else "El polinomio no tiene raíces reales."
+            )
+        estado = tk.NORMAL if self._raices_rf else tk.DISABLED
+        self.rf_raiz_anterior.config(state=estado)
+        self.rf_raiz_siguiente.config(state=estado)
+
+    def _navegar_raiz_rf(self, direccion):
+        if not self._raices_rf:
+            return
+        if self._raiz_actual_rf is None:
+            indice = 0 if direccion > 0 else len(self._raices_rf) - 1
+        else:
+            indice = (self._raiz_actual_rf + direccion) % len(self._raices_rf)
+        self._mostrar_raiz_rf(indice)
+
+    def _mostrar_raiz_rf(self, indice):
+        self._raiz_actual_rf = indice
+        raiz = self._raices_rf[indice]
+        radio = max(1.0, abs(raiz) * 0.1)
+        self._rango_grafica_rf = (raiz - radio, raiz + radio)
+        self._desplazamiento_x_rf = 0.0
+        self._desplazamiento_y_rf = 0.0
+        self.rf_raiz_seleccionada.config(
+            text=f"Raíz {indice + 1}/{len(self._raices_rf)} · x ≈ {raiz:.10g}"
+        )
         self._dibujar_grafica_rf()
 
     def _mostrar_explicacion_continuidad_rf(self):
@@ -2309,6 +2644,14 @@ class VentanaPrincipal:
     def _seleccionar_iteracion_rf(self, _event=None):
         val = self.rf_selector.get()
         if not val or not self._resultado_rf: return
+        self._raiz_actual_rf = None
+        self._rango_grafica_rf = None
+        self._desplazamiento_x_rf = 0.0
+        self._desplazamiento_y_rf = 0.0
+        if self._raices_rf:
+            self.rf_raiz_seleccionada.config(
+                text="Usa las flechas para mostrar una raíz en la gráfica."
+            )
         if "Demostración de Continuidad" in val:
             self._mostrar_explicacion_continuidad_rf()
             for item in self.rf_tabla.selection(): self.rf_tabla.selection_remove(item)
@@ -2326,6 +2669,14 @@ class VentanaPrincipal:
     def _seleccionar_fila_rf(self, _event=None):
         seleccion = self.rf_tabla.selection()
         if seleccion and self._resultado_rf:
+            self._raiz_actual_rf = None
+            self._rango_grafica_rf = None
+            self._desplazamiento_x_rf = 0.0
+            self._desplazamiento_y_rf = 0.0
+            if self._raices_rf:
+                self.rf_raiz_seleccionada.config(
+                    text="Usa las flechas para mostrar una raíz en la gráfica."
+                )
             indice = int(seleccion[0])
             offset = 1 if getattr(self._resultado_rf, "continuidad", None) else 0
             if 0 <= indice + offset < len(self.rf_selector["values"]):
@@ -2361,8 +2712,35 @@ class VentanaPrincipal:
 
     def _reset_zoom_rf(self, _event=None):
         self._zoom_rf = 1.0
+        self._desplazamiento_x_rf = 0.0
+        self._desplazamiento_y_rf = 0.0
         self._dibujar_grafica_rf()
         return "break"
+
+    def _iniciar_pan_grafica_rf(self, event):
+        self._inicio_pan_rf = (
+            event.x, event.y, self._desplazamiento_x_rf,
+            self._desplazamiento_y_rf,
+        )
+        self.rf_canvas.configure(cursor="fleur")
+
+    def _mover_grafica_rf(self, event):
+        if self._inicio_pan_rf is None:
+            return
+        x_inicio, y_inicio, pan_x, pan_y = self._inicio_pan_rf
+        ancho = max(1, self.rf_canvas.winfo_width() - 72)
+        alto = max(1, self.rf_canvas.winfo_height() - 56)
+        self._desplazamiento_x_rf = (
+            pan_x - (event.x - x_inicio) * self._escala_x_pan_rf / ancho
+        )
+        self._desplazamiento_y_rf = (
+            pan_y + (event.y - y_inicio) * self._escala_y_pan_rf / alto
+        )
+        self._dibujar_grafica_rf()
+
+    def _terminar_pan_grafica_rf(self, _event=None):
+        self._inicio_pan_rf = None
+        self.rf_canvas.configure(cursor="")
 
     def _dibujar_grafica_rf(self):
         canvas = getattr(self, "rf_canvas", None)
@@ -2372,6 +2750,10 @@ class VentanaPrincipal:
         if width < 80 or height < 80: return
         left, right, top, bottom = 54, width - 18, 18, height - 38
         selected = self._iteracion_seleccionada_rf
+        raiz_seleccionada = (
+            self._raices_rf[self._raiz_actual_rf]
+            if self._raiz_actual_rf is not None else None
+        )
         
         graph_range = self._rango_grafica_rf
         if graph_range is not None:
@@ -2389,25 +2771,31 @@ class VentanaPrincipal:
         span_total = (span * 1.7) / zoom
         xmin = centro - span_total / 2.0
         xmax = centro + span_total / 2.0
+        xmin += self._desplazamiento_x_rf
+        xmax += self._desplazamiento_x_rf
+        self._escala_x_pan_rf = xmax - xmin
 
         function = self._funcion_grafica_rf
         points = []
         if function:
-            samples = 240
+            samples = max(240, (right - left) * 2)
             for index in range(samples + 1):
                 x = xmin + (xmax - xmin) * index / samples
                 try:
                     y = function.evaluar(x)
-                    if abs(y) > 1e8: points.append(None)
+                    if not self._es_valor_grafica_valido(y): points.append(None)
                     else: points.append((x, y))
                 except (ValueError, ZeroDivisionError, OverflowError): points.append(None)
         
         values = [p[1] for p in points if p is not None]
         if selected: values.extend((selected.fa, selected.fc))
-        ymin, ymax = (min(values), max(values)) if values else (-1.0, 1.0)
-        if ymin == ymax: ymin, ymax = ymin - 1, ymax + 1
-        padding = (ymax - ymin) * 0.12
-        ymin, ymax = ymin - padding, ymax + padding
+        if raiz_seleccionada is not None:
+            values.append(0.0)
+        ymin, ymax = self._limites_verticales_grafica(values) if values else (-1.0, 1.0)
+        span_y = ymax - ymin
+        ymin -= self._desplazamiento_y_rf
+        ymax -= self._desplazamiento_y_rf
+        self._escala_y_pan_rf = span_y
         
         to_x = lambda x: left + (x - xmin) / (xmax - xmin) * (right - left)
         to_y = lambda y: bottom - (y - ymin) / (ymax - ymin) * (bottom - top)
@@ -2420,20 +2808,29 @@ class VentanaPrincipal:
             canvas.create_text(to_x(x), bottom + 15, text=f"{x:.4g}", fill=TEXT_MUTED, font=FONT_SMALL)
             canvas.create_text(left - 8, to_y(y), text=f"{y:.4g}", fill=TEXT_MUTED, font=FONT_SMALL, anchor="e")
             
-        if ymin <= 0 <= ymax: canvas.create_line(left, to_y(0), right, to_y(0), fill=TEXT_MUTED, width=1)
-        canvas.create_line(left, top, left, bottom, fill=TEXT_MUTED)
-        canvas.create_line(left, bottom, right, bottom, fill=TEXT_MUTED)
+        if ymin <= 0 <= ymax: canvas.create_line(left, to_y(0), right, to_y(0), fill=TEXT_MUTED, width=1.5)
+        if xmin <= 0 <= xmax: canvas.create_line(to_x(0), top, to_x(0), bottom, fill=TEXT_MUTED, width=1.5)
+        canvas.create_rectangle(left, top, right, bottom, outline=TEXT_MUTED)
 
-        segment = []
-        for point in points + [None]:
-            if point is None:
-                if len(segment) > 1:
-                    coords = [c for x, y in segment for c in (to_x(x), to_y(y))]
-                    canvas.create_line(*coords, fill=ACCENT_PRIMARY, width=2, smooth=True)
-                segment = []
-            else: segment.append(point)
+        for segment in self._segmentos_visibles_grafica(points, ymin, ymax):
+            coords = [c for x, y in segment for c in (to_x(x), to_y(y))]
+            canvas.create_line(*coords, fill=ACCENT_PRIMARY, width=2, tags=("function_trace",))
             
         canvas.create_text(right - 4, top + 8, text="f(x)", fill=ACCENT_PRIMARY, font=FONT_SMALL_BOLD, anchor="e")
+        if raiz_seleccionada is not None and xmin <= raiz_seleccionada <= xmax:
+            x_raiz, y_raiz = to_x(raiz_seleccionada), to_y(0.0)
+            canvas.create_line(
+                x_raiz, top, x_raiz, bottom, fill=SUCCESS_TEXT, dash=(3, 3),
+                tags=("selected_root",),
+            )
+            canvas.create_oval(
+                x_raiz - 5, y_raiz - 5, x_raiz + 5, y_raiz + 5,
+                fill=SUCCESS_TEXT, outline=BG_CARD, width=1, tags=("selected_root",),
+            )
+            canvas.create_text(
+                x_raiz, top + 18, text=f"Raíz {self._raiz_actual_rf + 1}",
+                fill=SUCCESS_TEXT, font=FONT_SMALL_BOLD, tags=("selected_root",),
+            )
         if abs(zoom - 1.0) > 1e-4:
             canvas.create_text(left + 6, top + 8, text=f"Escala: {zoom:.2g}x", fill=TEXT_MUTED, font=FONT_MICRO, anchor="w")
 
@@ -2460,11 +2857,20 @@ class VentanaPrincipal:
         self.rf_iteraciones_total.config(text="—")
         self.rf_continuidad.config(text="—", fg=TEXT_MUTED)
         self.rf_estado.config(text="Esperando datos", fg=TEXT_MUTED)
+        self.rf_cantidad_raices.config(text="—")
+        self.rf_raiz_seleccionada.config(text="Conteo numérico disponible solo para polinomios")
+        self.rf_raiz_anterior.config(state=tk.DISABLED)
+        self.rf_raiz_siguiente.config(state=tk.DISABLED)
         self._resultado_rf = None
         self._funcion_grafica_rf = None
         self._iteracion_seleccionada_rf = None
         self._rango_grafica_rf = None
+        self._raices_rf = ()
+        self._raiz_actual_rf = None
         self._zoom_rf = 1.0
+        self._desplazamiento_x_rf = 0.0
+        self._desplazamiento_y_rf = 0.0
+        self._inicio_pan_rf = None
         self.rf_selector["values"] = ()
         self.rf_selector.set("")
         for item in self.rf_tabla.get_children(): self.rf_tabla.delete(item)
