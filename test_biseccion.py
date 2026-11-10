@@ -4,6 +4,194 @@ from modelo.biseccion import FuncionMatematica, biseccion, verificar_continuidad
 
 
 class PruebasBiseccion(unittest.TestCase):
+    def test_acciones_de_calculo_aparecen_antes_de_las_entradas(self):
+        import tkinter as tk
+
+        from controlador.controlador import Controlador
+
+        root = tk.Tk()
+        root.geometry("1280x1000")
+        try:
+            vista = Controlador(root).vista
+            root.update()
+
+            self.assertIn(vista.btn_resolver, vista.barra_resolver_gauss.pack_slaves())
+            self.assertLess(
+                vista.barra_resolver_gauss.master.pack_slaves().index(
+                    vista.barra_resolver_gauss
+                ),
+                vista.barra_resolver_gauss.master.pack_slaves().index(vista.scroll_matriz),
+            )
+            self.assertIn(
+                vista.btn_calcular_vectores,
+                vista.barra_calcular_vectores.pack_slaves(),
+            )
+            self.assertLess(
+                vista.barra_calcular_vectores.master.pack_slaves().index(
+                    vista.barra_calcular_vectores
+                ),
+                vista.barra_calcular_vectores.master.pack_slaves().index(
+                    vista.scroll_vectores
+                ),
+            )
+            self.assertLess(
+                vista.barra_operaciones_matriz.master.pack_slaves().index(
+                    vista.barra_operaciones_matriz
+                ),
+                vista.barra_operaciones_matriz.master.pack_slaves().index(
+                    vista.scroll_matrices_ops
+                ),
+            )
+            self.assertLess(
+                vista.barra_calcular_romanos.master.pack_slaves().index(
+                    vista.barra_calcular_romanos
+                ),
+                vista.barra_calcular_romanos.master.pack_slaves().index(
+                    vista.scroll_romanos
+                ),
+            )
+            self.assertIn(
+                vista.btn_calcular_romanos,
+                vista.barra_calcular_romanos.pack_slaves(),
+            )
+        finally:
+            for callback in root.tk.call("after", "info"):
+                root.after_cancel(callback)
+            root.destroy()
+
+    def test_areas_de_entrada_y_resultado_ajustan_su_altura(self):
+        import tkinter as tk
+
+        from controlador.controlador import Controlador
+
+        root = tk.Tk()
+        root.geometry("1280x880")
+        try:
+            vista = Controlador(root).vista
+            root.update()
+
+            alto_matriz = int(vista.scroll_matriz.canvas.cget("height"))
+            vista.construir_cuadricula(10, 10)
+            root.update()
+            self.assertGreater(
+                int(vista.scroll_matriz.canvas.cget("height")),
+                alto_matriz,
+            )
+
+            alto_inicial = int(vista.scroll_vectores.canvas.cget("height"))
+            vista.construir_vectores(10, 10)
+            root.update()
+            alto_ampliado = int(vista.scroll_vectores.canvas.cget("height"))
+            self.assertGreater(alto_ampliado, alto_inicial)
+
+            alto_matrices = int(vista.scroll_matrices_ops.canvas.cget("height"))
+            vista.construir_matrices_ops(10, 10, 10, 10)
+            root.update()
+            self.assertGreater(
+                int(vista.scroll_matrices_ops.canvas.cget("height")),
+                alto_matrices,
+            )
+
+            consola = vista.txt_resultados_conv
+            vista._write(consola, "línea corta")
+            root.update_idletasks()
+            alto_corto = int(consola.cget("height"))
+
+            vista._write(consola, "\n".join(f"paso {i}" for i in range(8)))
+            root.update_idletasks()
+            alto_largo = int(consola.cget("height"))
+            self.assertGreater(alto_largo, alto_corto)
+            self.assertLessEqual(alto_largo, 18)
+
+            vista._write(consola, "")
+            root.update_idletasks()
+            self.assertLess(int(consola.cget("height")), alto_largo)
+        finally:
+            for callback in root.tk.call("after", "info"):
+                root.after_cancel(callback)
+            root.destroy()
+
+    def test_resultados_romanos_se_alinean_arriba_a_la_izquierda(self):
+        import tkinter as tk
+
+        from controlador.controlador import Controlador
+
+        root = tk.Tk()
+        try:
+            vista = Controlador(root).vista
+            self.assertEqual(vista.lbl_res_romano.cget("anchor"), "nw")
+            self.assertEqual(vista.lbl_res_romano.cget("justify"), "left")
+        finally:
+            for callback in root.tk.call("after", "info"):
+                root.after_cancel(callback)
+            root.destroy()
+
+    def test_gauss_resultados_debajo_de_matriz_y_en_dos_paneles(self):
+        import tkinter as tk
+
+        from controlador.controlador import Controlador
+
+        root = tk.Tk()
+        root.geometry("1280x1000")
+        try:
+            app = Controlador(root)
+            vista = app.vista
+            root.update()
+
+            tarjeta_matriz = vista.scroll_matriz.master.master
+            tarjeta_resultados = vista.paneles_resultado_gauss.master.master
+            diagnostico, historial = vista.paneles_resultado_gauss.winfo_children()
+
+            self.assertLess(
+                tarjeta_matriz.winfo_rooty() + tarjeta_matriz.winfo_height(),
+                tarjeta_resultados.winfo_rooty(),
+            )
+            self.assertLess(diagnostico.winfo_rootx(), historial.winfo_rootx())
+            self.assertGreater(diagnostico.winfo_width(), 0)
+            self.assertGreater(historial.winfo_width(), 0)
+            self.assertGreater(
+                vista.txt_historial.winfo_width(),
+                vista.txt_historial.winfo_reqwidth(),
+            )
+        finally:
+            for callback in root.tk.call("after", "info"):
+                root.after_cancel(callback)
+            root.destroy()
+
+    def test_menu_de_metodos_vertical_a_la_izquierda(self):
+        import tkinter as tk
+
+        from controlador.controlador import Controlador
+
+        root = tk.Tk()
+        root.geometry("1280x880")
+        try:
+            app = Controlador(root)
+            vista = app.vista
+            root.update_idletasks()
+
+            self.assertEqual(vista.nav_segmentada.orient, tk.VERTICAL)
+            self.assertEqual(len(vista.nav_segmentada.botones), len(vista.modulos))
+            self.assertTrue(all(
+                boton.pack_info()["fill"] == tk.X
+                for boton in vista.nav_segmentada.botones
+            ))
+            self.assertLess(
+                vista.nav_segmentada.winfo_rootx(),
+                vista.nb_main.winfo_rootx(),
+            )
+
+            vista.nav_segmentada.seleccionar(len(vista.modulos) - 1)
+            root.update()
+            self.assertEqual(vista.nb_main.index("current"), len(vista.modulos) - 1)
+            vista.nb_main.select(0)
+            root.update()
+            self.assertEqual(vista.nav_segmentada.seleccionado, 0)
+        finally:
+            for callback in root.tk.call("after", "info"):
+                root.after_cancel(callback)
+            root.destroy()
+
     def test_ultima_iteracion_seleccionada_permanece_visible(self):
         import tkinter as tk
         from controlador.controlador import Controlador

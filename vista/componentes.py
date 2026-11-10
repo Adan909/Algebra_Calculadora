@@ -285,7 +285,8 @@ class ControlSegmentado(tk.Frame):
     """
     Selector por segmentos estilo píldora para alternar pestañas o modos.
     """
-    def __init__(self, parent, opciones, comando=None, initial_index=0, **kwargs):
+    def __init__(self, parent, opciones, comando=None, initial_index=0,
+                 orient=tk.HORIZONTAL, **kwargs):
         super().__init__(
             parent, bg=BG_SECONDARY,
             highlightthickness=1, highlightbackground=BORDER_SUBTLE,
@@ -294,25 +295,33 @@ class ControlSegmentado(tk.Frame):
         self.opciones = opciones
         self.comando = comando
         self.seleccionado = initial_index
+        self.orient = orient
         self.botones = []
 
         for idx, texto in enumerate(opciones):
             btn = tk.Button(
-                self, text=texto, font=FONT_SMALL_BOLD,
+                self, text=texto,
+                font=FONT_SMALL_BOLD if orient == tk.HORIZONTAL else FONT_SMALL,
                 relief="flat", bd=0, cursor="hand2",
-                padx=14, pady=5,
+                padx=14 if orient == tk.HORIZONTAL else 10,
+                pady=5 if orient == tk.HORIZONTAL else 9,
+                anchor="center" if orient == tk.HORIZONTAL else "w",
+                justify=tk.LEFT,
                 command=lambda i=idx: self.seleccionar(i)
             )
-            btn.pack(side=tk.LEFT, padx=1, pady=1)
+            if orient == tk.VERTICAL:
+                btn.pack(fill=tk.X, padx=1, pady=2)
+            else:
+                btn.pack(side=tk.LEFT, padx=1, pady=1)
             self.botones.append(btn)
 
         self._actualizar_estilo()
 
-    def seleccionar(self, index):
+    def seleccionar(self, index, notificar=True):
         if 0 <= index < len(self.opciones):
             self.seleccionado = index
             self._actualizar_estilo()
-            if self.comando:
+            if notificar and self.comando:
                 self.comando(index, self.opciones[index])
 
     def _actualizar_estilo(self):
@@ -493,8 +502,13 @@ class ScrollableFrame(ttk.Frame):
     """
     Contenedor con barra de desplazamiento vertical y horizontal en tema claro.
     """
-    def __init__(self, container, bg_color=BG_WINDOW, *args, **kwargs):
+    def __init__(
+        self, container, bg_color=BG_WINDOW, *args, fit_content=False,
+        max_content_height=360, **kwargs
+    ):
         super().__init__(container, *args, **kwargs)
+        self.fit_content = fit_content
+        self.max_content_height = max_content_height
 
         self.canvas = tk.Canvas(
             self, borderwidth=0, highlightthickness=0,
@@ -504,12 +518,7 @@ class ScrollableFrame(ttk.Frame):
         self.scrollbar_x = ttk.Scrollbar(self, orient="horizontal", command=self.canvas.xview)
 
         self.scrollable_frame = tk.Frame(self.canvas, bg=bg_color)
-        self.scrollable_frame.bind(
-            "<Configure>",
-            lambda e: self.canvas.configure(
-                scrollregion=self.canvas.bbox("all")
-            )
-        )
+        self.scrollable_frame.bind("<Configure>", self._actualizar_region)
 
         self._window_id = self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
         self.canvas.configure(yscrollcommand=self.scrollbar_y.set, xscrollcommand=self.scrollbar_x.set)
@@ -523,6 +532,34 @@ class ScrollableFrame(ttk.Frame):
 
         self.canvas.bind("<Configure>", self._al_redimensionar_canvas)
         self.canvas.bind_all("<MouseWheel>", self._on_mousewheel)
+
+    def _actualizar_region(self, _event=None):
+        self.ajustar_al_contenido()
+
+    def ajustar_al_contenido(self):
+        if self.fit_content:
+            alto_requerido = self.scrollable_frame.winfo_reqheight()
+            alto_visible = min(alto_requerido, self.max_content_height)
+            ancho = max(
+                self.canvas.winfo_width(),
+                self.scrollable_frame.winfo_reqwidth(),
+            )
+            alto = max(self.canvas.winfo_height(), alto_requerido)
+            self.canvas.configure(height=max(alto_visible, 1))
+            self.canvas.itemconfigure(self._window_id, width=ancho, height=alto)
+        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+
+    def observar_contenido(self):
+        def observar(widget):
+            widget.bind("<Configure>", self._al_cambiar_contenido, add="+")
+            for hijo in widget.winfo_children():
+                observar(hijo)
+
+        for hijo in self.scrollable_frame.winfo_children():
+            observar(hijo)
+
+    def _al_cambiar_contenido(self, _event=None):
+        self.ajustar_al_contenido()
 
     def _al_redimensionar_canvas(self, event):
         min_width = self.scrollable_frame.winfo_reqwidth()

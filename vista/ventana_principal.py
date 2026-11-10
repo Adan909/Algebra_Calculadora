@@ -49,6 +49,7 @@ class VentanaPrincipal:
         self.root.geometry("1280x880")
         self.root.minsize(1040, 720)
         self.root.configure(bg=BG_WINDOW)
+        self._consolas_autoajuste = {}
 
         # Configuración del contenedor con scroll global
         self._scroll_canvas = tk.Canvas(
@@ -183,9 +184,6 @@ class VentanaPrincipal:
         lbl_logo.pack(side=tk.LEFT, pady=12)
         Tooltip(lbl_logo, "Motor de Álgebra Lineal & Métodos Numéricos\nPrecisión Racional Exacta con fracciones continuas")
 
-        center_box = tk.Frame(header_bar, bg=BG_CARD)
-        center_box.pack(side=tk.LEFT, fill=tk.Y, expand=True)
-
         self.modulos = [
             "Gauss-Jordan",
             "Vectorial & Matrices",
@@ -195,11 +193,6 @@ class VentanaPrincipal:
             "Regla Falsa",
             "Newton-Raphson",
         ]
-        self.nav_segmentada = ControlSegmentado(
-            center_box, self.modulos, comando=self._al_cambiar_modulo, initial_index=0
-        )
-        self.nav_segmentada.pack(side=tk.LEFT, pady=10)
-
         right_box = tk.Frame(header_bar, bg=BG_CARD)
         right_box.pack(side=tk.RIGHT, fill=tk.Y, padx=(10, 18))
 
@@ -220,6 +213,12 @@ class VentanaPrincipal:
     def _al_cambiar_modulo(self, index, nombre):
         if hasattr(self, "nb_main"):
             self.nb_main.select(index)
+
+    def _sincronizar_navegacion_modulo(self, _event=None):
+        if not hasattr(self, "nav_segmentada") or not hasattr(self, "nb_main"):
+            return
+        indice = self.nb_main.index("current")
+        self.nav_segmentada.seleccionar(indice, notificar=False)
 
     # ==========================================================================
     # GESTIÓN Y CONMUTACIÓN DINÁMICA DE TEMA (CLARO / OSCURO)
@@ -265,7 +264,6 @@ class VentanaPrincipal:
             estado["gauss_hist"] = self.txt_historial.get("1.0", tk.END).strip() if hasattr(self, "txt_historial") else ""
             estado["gauss_badge_texto"] = self.badge_clasificacion.lbl_text.cget("text") if hasattr(self, "badge_clasificacion") else ""
             estado["gauss_badge_tipo"] = getattr(self.badge_clasificacion, "_tipo", "info") if hasattr(self, "badge_clasificacion") else "info"
-            estado["gauss_tab_res"] = self.nb_gauss_res.index("current") if hasattr(self, "nb_gauss_res") else 0
 
             # Vectorial & Matrices
             estado["vec_dim"] = self.spin_dim_v.get_int() if hasattr(self, "spin_dim_v") else 3
@@ -375,9 +373,6 @@ class VentanaPrincipal:
                     self.actualizar_historial(hist_txt)
                 if badge_txt and hasattr(self, "badge_clasificacion"):
                     self.badge_clasificacion.actualizar(badge_txt, badge_tipo)
-
-            if hasattr(self, "nb_gauss_res"):
-                self.nb_gauss_res.select(estado.get("gauss_tab_res", 0))
 
             # Restaurar Vectorial & Matrices
             v_dim = estado.get("vec_dim", 3)
@@ -572,12 +567,29 @@ class VentanaPrincipal:
     # ==========================================================================
     def _construir_cuerpo(self):
         container = tk.Frame(self._contenido_scroll, bg=BG_WINDOW)
-        container.pack(fill=tk.BOTH, expand=True, padx=16, pady=12)
+        container.pack(fill=tk.BOTH, expand=True, padx=12, pady=10)
+
+        sidebar = tk.Frame(
+            container, bg=BG_CARD, width=220,
+            highlightthickness=1, highlightbackground=BORDER_SUBTLE,
+        )
+        sidebar.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 10))
+        sidebar.pack_propagate(False)
+        tk.Label(
+            sidebar, text="MÉTODOS", font=FONT_SMALL_BOLD,
+            bg=BG_CARD, fg=TEXT_MUTED, anchor="w",
+        ).pack(fill=tk.X, padx=12, pady=(14, 8))
+        self.nav_segmentada = ControlSegmentado(
+            sidebar, self.modulos, comando=self._al_cambiar_modulo,
+            initial_index=0, orient=tk.VERTICAL,
+        )
+        self.nav_segmentada.pack(fill=tk.X, padx=8, pady=(0, 10))
 
         s = ttk.Style()
         s.layout("Hidden.TNotebook.Tab", [])
         self.nb_main = ttk.Notebook(container, style="Hidden.TNotebook")
-        self.nb_main.pack(fill=tk.BOTH, expand=True)
+        self.nb_main.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.nb_main.bind("<<NotebookTabChanged>>", self._sincronizar_navegacion_modulo)
 
         self.tab_gauss     = tk.Frame(self.nb_main, bg=BG_WINDOW)
         self.tab_vectorial = tk.Frame(self.nb_main, bg=BG_WINDOW)
@@ -606,7 +618,9 @@ class VentanaPrincipal:
     # ==========================================================================
     # HELPERS Y CONSOLA DE PANTALLA COMPLETA
     # ==========================================================================
-    def _crear_consola(self, parent, height=12, wrap=tk.WORD, **kwargs):
+    def _crear_consola(
+        self, parent, height=12, wrap=tk.WORD, autoajustar=False, **kwargs
+    ):
         txt = tk.Text(
             parent, height=height, font=FONT_MONO,
             bg=BG_CARD, fg=TEXT_PRIMARY, spacing1=2, spacing3=2,
@@ -616,7 +630,26 @@ class VentanaPrincipal:
             highlightthickness=1, highlightbackground=BORDER_SUBTLE, highlightcolor=ACCENT_PRIMARY,
             state=tk.DISABLED, wrap=wrap, **kwargs
         )
+        if autoajustar:
+            limites = (2, 18)
+            self._consolas_autoajuste[txt] = limites
+            txt.bind(
+                "<Configure>",
+                lambda _event, widget=txt: self.root.after_idle(
+                    lambda: self._ajustar_alto_consola(widget)
+                    if widget.winfo_exists() else None
+                ),
+                add="+",
+            )
         return txt
+
+    def _ajustar_alto_consola(self, widget):
+        limites = self._consolas_autoajuste.get(widget)
+        if limites is None or not widget.winfo_exists():
+            return
+        lineas = widget.count("1.0", "end-1c", "displaylines")
+        alto = lineas[0] if lineas else 1
+        widget.configure(height=max(limites[0], min(alto, limites[1])))
 
     def _conectar_consola_fullscreen(self, widget_text, titulo, bar_derecha=None, proveedor_texto=None):
         target = proveedor_texto if proveedor_texto is not None else widget_text
@@ -783,6 +816,7 @@ class VentanaPrincipal:
         widget.delete("1.0", tk.END)
         widget.insert(tk.END, texto)
         widget.config(state=tk.DISABLED)
+        self._ajustar_alto_consola(widget)
 
     def _ops(self):
         self._op_count += 1
@@ -845,13 +879,13 @@ class VentanaPrincipal:
                 tk.Label(pasos_bar, text="→", font=FONT_SUBHEAD, bg=BG_CARD, fg=BORDER_SUBTLE).pack(side=tk.LEFT)
 
         cols_frame = tk.Frame(parent, bg=BG_WINDOW)
-        cols_frame.pack(fill=tk.BOTH, expand=True)
+        cols_frame.pack(fill=tk.X)
 
         col_izq = tk.Frame(cols_frame, bg=BG_WINDOW)
-        col_izq.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 6))
+        col_izq.pack(side=tk.TOP, fill=tk.X, pady=(0, 8))
 
         col_der = tk.Frame(cols_frame, bg=BG_WINDOW)
-        col_der.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(6, 0))
+        col_der.pack(side=tk.TOP, fill=tk.X)
 
         tarjeta_cfg = Tarjeta(col_izq, titulo="Parámetros del Sistema", subtitulo="Selección de dimensiones y algoritmo de solución")
         tarjeta_cfg.pack(fill=tk.X, pady=(0, 8))
@@ -900,66 +934,94 @@ class VentanaPrincipal:
             chip.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=3)
 
         tarjeta_matriz = Tarjeta(col_izq, titulo="Matriz Aumentada [ A | b ]", subtitulo="Navega con Tab / Flechas. Se aceptan fracciones (ej: 1/2, -3/4)")
-        tarjeta_matriz.pack(fill=tk.BOTH, expand=True)
+        tarjeta_matriz.pack(fill=tk.X)
 
-        self.scroll_matriz = ScrollableFrame(tarjeta_matriz.contenido, bg_color=BG_CARD)
-        self.scroll_matriz.pack(fill=tk.BOTH, expand=True, pady=(0, 8))
+        btn_box = tk.Frame(tarjeta_matriz.contenido, bg=BG_CARD)
+        self.barra_resolver_gauss = btn_box
+        btn_box.pack(fill=tk.X, pady=(0, 6))
+        self.btn_resolver = BotonPrimario(
+            btn_box, text="⚡ RESOLVER SISTEMA", shortcut="Ctrl + Enter",
+            command=self.controlador.resolver_sistema, font=FONT_SMALL_BOLD,
+            padx=14, pady=6,
+        )
+        self.btn_resolver.pack(side=tk.RIGHT)
+
+        self.scroll_matriz = ScrollableFrame(
+            tarjeta_matriz.contenido, bg_color=BG_CARD, fit_content=True,
+        )
+        self.scroll_matriz.pack(fill=tk.X, pady=(0, 8))
 
         self.matriz_entries = []
         self.vector_entries = []
 
-        btn_box = tk.Frame(tarjeta_matriz.contenido, bg=BG_CARD)
-        btn_box.pack(fill=tk.X, pady=(4, 0))
-
-        self.btn_resolver = BotonPrimario(
-            btn_box, text="⚡ RESOLVER SISTEMA", shortcut="Ctrl + Enter",
-            command=self.controlador.resolver_sistema, font=FONT_TITLE,
-            padx=20, pady=10
-        )
-        self.btn_resolver.pack(fill=tk.X)
         self.root.bind("<Control-Return>", lambda e: self.controlador.resolver_sistema())
         self.root.bind("<Control-KP_Enter>", lambda e: self.controlador.resolver_sistema())
 
-        tarjeta_res = Tarjeta(col_der, titulo="Resultados del Análisis", subtitulo="Diagnóstico matemático e historial de pivoteo")
-        tarjeta_res.pack(fill=tk.BOTH, expand=True)
+        tarjeta_res = Tarjeta(
+            col_der, titulo="Resultados del Análisis",
+            subtitulo="Diagnóstico, solución e historial de pivoteo",
+        )
+        tarjeta_res.pack(fill=tk.X)
 
-        self.nb_gauss_res = ttk.Notebook(tarjeta_res.contenido, style="Sub.TNotebook")
-        self.nb_gauss_res.pack(fill=tk.BOTH, expand=True)
+        self.paneles_resultado_gauss = tk.Frame(tarjeta_res.contenido, bg=BG_CARD)
+        self.paneles_resultado_gauss.pack(fill=tk.X)
+        self.paneles_resultado_gauss.grid_columnconfigure(
+            0, weight=1, uniform="paneles_resultado_gauss",
+        )
+        self.paneles_resultado_gauss.grid_columnconfigure(
+            1, weight=1, uniform="paneles_resultado_gauss",
+        )
+        self.paneles_resultado_gauss.grid_rowconfigure(0, weight=0)
 
-        t_diag = tk.Frame(self.nb_gauss_res, bg=BG_CARD, padx=12, pady=10)
-        self.nb_gauss_res.add(t_diag, text="  Diagnóstico & Solución  ")
+        t_diag = tk.Frame(self.paneles_resultado_gauss, bg=BG_CARD, padx=12, pady=10)
+        t_diag.grid(row=0, column=0, sticky="new", padx=(0, 5))
+        tk.Label(
+            t_diag, text="Diagnóstico & Solución",
+            font=FONT_SUBHEAD, bg=BG_CARD, fg=TEXT_PRIMARY,
+        ).pack(anchor="w", pady=(0, 8))
 
         self.badge_clasificacion = BadgeEstado(t_diag, text="SIN CALCULAR AÚN", tipo="neutral")
         self.badge_clasificacion.pack(anchor="w", pady=(0, 10))
 
         cols_diag = tk.Frame(t_diag, bg=BG_CARD)
-        cols_diag.pack(fill=tk.BOTH, expand=True)
+        cols_diag.pack(fill=tk.X)
 
         box_sol = tk.Frame(cols_diag, bg=BG_CARD)
-        box_sol.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 5))
+        box_sol.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
 
         tk.Label(box_sol, text="Vector Solución:", font=FONT_SMALL_BOLD, bg=BG_CARD, fg=TEXT_PRIMARY).pack(anchor="w", pady=(0, 4))
-        self.txt_solucion = self._crear_consola(box_sol, height=9)
-        self.txt_solucion.pack(fill=tk.BOTH, expand=True)
+        self.txt_solucion = self._crear_consola(
+            box_sol, height=2, autoajustar=True,
+        )
+        self.txt_solucion.pack(fill=tk.X)
 
         box_ver = tk.Frame(cols_diag, bg=BG_CARD)
-        box_ver.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(5, 0))
+        box_ver.pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=(5, 0))
 
         tk.Label(box_ver, text="Comprobación en Ecuaciones:", font=FONT_SMALL_BOLD, bg=BG_CARD, fg=TEXT_PRIMARY).pack(anchor="w", pady=(0, 4))
-        self.txt_verificacion = self._crear_consola(box_ver, height=9)
-        self.txt_verificacion.pack(fill=tk.BOTH, expand=True)
+        self.txt_verificacion = self._crear_consola(
+            box_ver, height=2, autoajustar=True,
+        )
+        self.txt_verificacion.pack(fill=tk.X)
 
-        t_hist = tk.Frame(self.nb_gauss_res, bg=BG_CARD, padx=10, pady=8)
-        self.nb_gauss_res.add(t_hist, text="  Historial de Pivoteo Paso a Paso  ")
+        t_hist = tk.Frame(self.paneles_resultado_gauss, bg=BG_CARD, padx=10, pady=10)
+        t_hist.grid(row=0, column=1, sticky="new", padx=(5, 0))
 
         bar_h = tk.Frame(t_hist, bg=BG_CARD)
         bar_h.pack(fill=tk.X, pady=(0, 4))
+        tk.Label(
+            bar_h, text="Historial de Pivoteo Paso a Paso",
+            font=FONT_SUBHEAD, bg=BG_CARD, fg=TEXT_PRIMARY,
+        ).pack(anchor="w", pady=(0, 4))
         tk.Label(bar_h, text="Transformaciones elementales de fila:", font=FONT_SMALL_BOLD, bg=BG_CARD, fg=TEXT_SECONDARY).pack(side=tk.LEFT)
 
         frame_txt_h = tk.Frame(t_hist, bg=BG_CARD)
-        frame_txt_h.pack(fill=tk.BOTH, expand=True)
+        frame_txt_h.pack(fill=tk.X)
 
-        self.txt_historial = self._crear_consola(frame_txt_h, height=18, wrap=tk.NONE)
+        self.txt_historial = self._crear_consola(
+            frame_txt_h, height=2, wrap=tk.NONE, width=1,
+            autoajustar=True,
+        )
         sc_hy = ttk.Scrollbar(frame_txt_h, orient="vertical", command=self.txt_historial.yview)
         sc_hx = ttk.Scrollbar(frame_txt_h, orient="horizontal", command=self.txt_historial.xview)
         self.txt_historial.configure(yscrollcommand=sc_hy.set, xscrollcommand=sc_hx.set)
@@ -1074,6 +1136,7 @@ class VentanaPrincipal:
             self._conectar_navegacion_celdas(celda_b, i, n, m, n)
             self.vector_entries.append(celda_b)
 
+        self.scroll_matriz.observar_contenido()
         self._actualizar_paso_activo(1)
 
     def _conectar_navegacion_celdas(self, entry, row, col, max_r, max_c):
@@ -1198,7 +1261,7 @@ class VentanaPrincipal:
         self.nb_vectorial.add(tv, text="  Vectores en R^n  ")
 
         cols_v = tk.Frame(tv, bg=BG_WINDOW)
-        cols_v.pack(fill=tk.BOTH, expand=True, pady=6)
+        cols_v.pack(fill=tk.X, pady=6)
 
         v_izq = tk.Frame(cols_v, bg=BG_WINDOW)
         v_izq.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 6))
@@ -1227,28 +1290,36 @@ class VentanaPrincipal:
         self.entrada_escalar_vector.pack(side=tk.LEFT)
 
         t_vinp = Tarjeta(v_izq, titulo="Componentes de los Vectores", subtitulo="Ingresa los valores de v₁...vk y el vector objetivo b")
-        t_vinp.pack(fill=tk.BOTH, expand=True)
+        t_vinp.pack(fill=tk.X)
 
-        self.scroll_vectores = ScrollableFrame(t_vinp.contenido, bg_color=BG_CARD)
-        self.scroll_vectores.pack(fill=tk.BOTH, expand=True, pady=(0, 8))
+        btn_calcular_vectores = tk.Frame(t_vinp.contenido, bg=BG_CARD)
+        self.barra_calcular_vectores = btn_calcular_vectores
+        btn_calcular_vectores.pack(fill=tk.X, pady=(0, 6))
+        self.btn_calcular_vectores = BotonPrimario(
+            btn_calcular_vectores, text="▶ Calcular Operaciones y Combinación Lineal",
+            command=self.controlador.operar_vectores, font=FONT_SMALL_BOLD,
+        )
+        self.btn_calcular_vectores.pack(side=tk.RIGHT)
+
+        self.scroll_vectores = ScrollableFrame(
+            t_vinp.contenido, bg_color=BG_CARD, fit_content=True,
+        )
+        self.scroll_vectores.pack(fill=tk.X, pady=(0, 8))
         self.vec_entries = []
         self.vec_b_entries = []
 
-        BotonPrimario(
-            t_vinp.contenido, text="▶ Calcular Operaciones y Combinación Lineal",
-            command=self.controlador.operar_vectores, font=FONT_HEADING
-        ).pack(fill=tk.X)
-
         t_vres = Tarjeta(v_der, titulo="Resultados Vectoriales", subtitulo="Operaciones algebraicas y dependencia lineal")
-        t_vres.pack(fill=tk.BOTH, expand=True)
+        t_vres.pack(fill=tk.X)
 
         frame_txt_v = tk.Frame(t_vres.contenido, bg=BG_CARD)
-        frame_txt_v.pack(fill=tk.BOTH, expand=True)
+        frame_txt_v.pack(fill=tk.X)
 
-        self.txt_res_vectores = self._crear_consola(frame_txt_v, height=18)
+        self.txt_res_vectores = self._crear_consola(
+            frame_txt_v, height=2, autoajustar=True,
+        )
         sc_vy = ttk.Scrollbar(frame_txt_v, orient="vertical", command=self.txt_res_vectores.yview)
         self.txt_res_vectores.configure(yscrollcommand=sc_vy.set)
-        self.txt_res_vectores.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.txt_res_vectores.pack(side=tk.LEFT, fill=tk.X, expand=True)
         sc_vy.pack(side=tk.RIGHT, fill=tk.Y)
 
         self._conectar_consola_fullscreen(self.txt_res_vectores, "Operaciones Vectoriales")
@@ -1258,7 +1329,7 @@ class VentanaPrincipal:
         self.nb_vectorial.add(tm, text="  Álgebra Matricial (A+B, A×B, A⁻¹, LU)  ")
 
         cols_m = tk.Frame(tm, bg=BG_WINDOW)
-        cols_m.pack(fill=tk.BOTH, expand=True, pady=6)
+        cols_m.pack(fill=tk.X, pady=6)
 
         m_izq = tk.Frame(cols_m, bg=BG_WINDOW)
         m_izq.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 6))
@@ -1289,17 +1360,17 @@ class VentanaPrincipal:
             BotonFantasma(row_mej, text=lbl, command=lambda t=tipo: self.controlador.cargar_ejemplo_matrices(t)).pack(side=tk.LEFT, padx=2)
 
         t_minp = Tarjeta(m_izq, titulo="Matrices A y B", subtitulo="Ingresa los coeficientes numéricos")
-        t_minp.pack(fill=tk.BOTH, expand=True, pady=(0, 8))
+        t_minp.pack(fill=tk.X, pady=(0, 8))
 
-        self.scroll_matrices_ops = ScrollableFrame(t_minp.contenido, bg_color=BG_CARD)
-        self.scroll_matrices_ops.pack(fill=tk.BOTH, expand=True)
-        self.mat_entries_a = []
-        self.mat_entries_b = []
+        t_mops = tk.Frame(t_minp.contenido, bg=BG_CARD)
+        self.barra_operaciones_matriz = t_mops
+        t_mops.pack(fill=tk.X, pady=(0, 6))
+        tk.Label(
+            t_mops, text="Operaciones Disponibles",
+            font=FONT_SMALL_BOLD, bg=BG_CARD, fg=TEXT_PRIMARY,
+        ).pack(anchor="w", pady=(0, 4))
 
-        t_mops = Tarjeta(m_izq, titulo="Operaciones Disponibles", subtitulo="Aritmética, inversión, descomposición LU y determinantes")
-        t_mops.pack(fill=tk.X)
-
-        row_op1 = tk.Frame(t_mops.contenido, bg=BG_CARD)
+        row_op1 = tk.Frame(t_mops, bg=BG_CARD)
         row_op1.pack(fill=tk.X, pady=(0, 6))
 
         for txt, op in [("A + B", "suma"), ("A − B", "resta"), ("A × B", "multiplicacion")]:
@@ -1310,7 +1381,7 @@ class VentanaPrincipal:
         self.entrada_escalar_mat.pack(side=tk.LEFT, padx=(0, 4))
         BotonSecundario(row_op1, text="c × A", command=lambda: self.controlador.operar_matrices("escalar"), font=FONT_SMALL_BOLD, padx=8, pady=4).pack(side=tk.LEFT)
 
-        row_op2 = tk.Frame(t_mops.contenido, bg=BG_CARD)
+        row_op2 = tk.Frame(t_mops, bg=BG_CARD)
         row_op2.pack(fill=tk.X)
 
         BotonSecundario(row_op2, text="A⁻¹ (Inversa A)", command=lambda: self.controlador.operar_matrices("inversa_a"), font=FONT_SMALL_BOLD, padx=6, pady=4).pack(side=tk.LEFT, padx=2)
@@ -1319,13 +1390,22 @@ class VentanaPrincipal:
         BotonSecundario(row_op2, text="det(A) Sarrus", command=lambda: self.controlador.operar_matrices("determinante_sarrus"), font=FONT_SMALL_BOLD, padx=6, pady=4).pack(side=tk.LEFT, padx=2)
         BotonSecundario(row_op2, text="det(A) Cofact.", command=lambda: self.controlador.operar_matrices("determinante_cofactores"), font=FONT_SMALL_BOLD, padx=6, pady=4).pack(side=tk.LEFT, padx=2)
 
+        self.scroll_matrices_ops = ScrollableFrame(
+            t_minp.contenido, bg_color=BG_CARD, fit_content=True,
+        )
+        self.scroll_matrices_ops.pack(fill=tk.X)
+        self.mat_entries_a = []
+        self.mat_entries_b = []
+
         t_mres = Tarjeta(m_der, titulo="Resultados del Cálculo Matricial", subtitulo="Matrices resultantes y desglose analítico paso a paso")
-        t_mres.pack(fill=tk.BOTH, expand=True)
+        t_mres.pack(fill=tk.X)
 
         frame_txt_m = tk.Frame(t_mres.contenido, bg=BG_CARD)
-        frame_txt_m.pack(fill=tk.BOTH, expand=True)
+        frame_txt_m.pack(fill=tk.X)
 
-        self.txt_res_matrices = self._crear_consola(frame_txt_m, height=20, wrap=tk.NONE)
+        self.txt_res_matrices = self._crear_consola(
+            frame_txt_m, height=2, wrap=tk.NONE, autoajustar=True,
+        )
         sc_my = ttk.Scrollbar(frame_txt_m, orient="vertical", command=self.txt_res_matrices.yview)
         sc_mx = ttk.Scrollbar(frame_txt_m, orient="horizontal", command=self.txt_res_matrices.xview)
         self.txt_res_matrices.configure(yscrollcommand=sc_my.set, xscrollcommand=sc_mx.set)
@@ -1366,6 +1446,7 @@ class VentanaPrincipal:
             celda_b.grid(row=k, column=j+2, padx=2, pady=8)
             self.vec_b_entries.append(celda_b)
         tk.Label(c, text=")", font=FONT_MONO_LG, bg=BG_CARD, fg=ACCENT_PRIMARY).grid(row=k, column=n+2, pady=8)
+        self.scroll_vectores.observar_contenido()
 
     def mostrar_resultado_vectores(self, t):
         self._write(self.txt_res_vectores, t)
@@ -1399,6 +1480,7 @@ class VentanaPrincipal:
                 celda.grid(row=i+1, column=j+off+1, padx=2, pady=2)
                 self.mat_entries_b.append(fila)
             tk.Label(c, text="]", font=FONT_MONO_LG, bg=BG_CARD, fg=TEXT_SECONDARY).grid(row=i+1, column=n_b+off+1)
+        self.scroll_matrices_ops.observar_contenido()
 
     def mostrar_resultado_matrices(self, t):
         self._write(self.txt_res_matrices, t)
@@ -1411,7 +1493,7 @@ class VentanaPrincipal:
         parent = self.tab_conv
 
         cols = tk.Frame(parent, bg=BG_WINDOW)
-        cols.pack(fill=tk.BOTH, expand=True)
+        cols.pack(fill=tk.X)
 
         col_l = tk.Frame(cols, bg=BG_WINDOW)
         col_l.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 6))
@@ -1458,12 +1540,14 @@ class VentanaPrincipal:
         ).pack(fill=tk.X)
 
         t_res = Tarjeta(col_r, titulo="Desglose y Procedimiento de Conversión", subtitulo="Pasos detallados de la conversión matemática")
-        t_res.pack(fill=tk.BOTH, expand=True)
+        t_res.pack(fill=tk.X)
 
         frame_txt_c = tk.Frame(t_res.contenido, bg=BG_CARD)
-        frame_txt_c.pack(fill=tk.BOTH, expand=True)
+        frame_txt_c.pack(fill=tk.X)
 
-        self.txt_resultados_conv = self._crear_consola(frame_txt_c, height=20, wrap=tk.WORD)
+        self.txt_resultados_conv = self._crear_consola(
+            frame_txt_c, height=2, wrap=tk.WORD, autoajustar=True,
+        )
         sc_cy = ttk.Scrollbar(frame_txt_c, orient="vertical", command=self.txt_resultados_conv.yview)
         self.txt_resultados_conv.configure(yscrollcommand=sc_cy.set)
         self.txt_resultados_conv.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
@@ -1482,7 +1566,7 @@ class VentanaPrincipal:
         parent = self.tab_romanos
 
         cols = tk.Frame(parent, bg=BG_WINDOW)
-        cols.pack(fill=tk.BOTH, expand=True)
+        cols.pack(fill=tk.X)
 
         col_l = tk.Frame(cols, bg=BG_WINDOW)
         col_l.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 6))
@@ -1518,25 +1602,32 @@ class VentanaPrincipal:
             BotonFantasma(row_rej, text=lbl, command=lambda t=tipo: self.controlador.cargar_ejemplo_romanos(t)).pack(side=tk.LEFT, padx=2)
 
         t_rinp = Tarjeta(col_l, titulo="Valores de los Operandos", subtitulo="Ingresa números romanos estándar (ej: X, XIV, MMXXIV)")
-        t_rinp.pack(fill=tk.BOTH, expand=True)
+        t_rinp.pack(fill=tk.X)
 
-        self.scroll_romanos = ScrollableFrame(t_rinp.contenido, bg_color=BG_CARD)
-        self.scroll_romanos.pack(fill=tk.BOTH, expand=True, pady=(0, 8))
+        btn_calcular_romanos = tk.Frame(t_rinp.contenido, bg=BG_CARD)
+        self.barra_calcular_romanos = btn_calcular_romanos
+        btn_calcular_romanos.pack(fill=tk.X, pady=(0, 6))
+        self.btn_calcular_romanos = BotonPrimario(
+            btn_calcular_romanos, text="⚡ CALCULAR RESULTADO",
+            command=self.controlador.calcular_operacion_romanos,
+            font=FONT_SMALL_BOLD,
+        )
+        self.btn_calcular_romanos.pack(side=tk.RIGHT)
+
+        self.scroll_romanos = ScrollableFrame(
+            t_rinp.contenido, bg_color=BG_CARD, fit_content=True,
+        )
+        self.scroll_romanos.pack(fill=tk.X, pady=(0, 8))
         self.romanos_entries = []
 
-        BotonPrimario(
-            t_rinp.contenido, text="⚡ CALCULAR RESULTADO",
-            command=self.controlador.calcular_operacion_romanos, font=FONT_HEADING
-        ).pack(fill=tk.X)
-
         t_rres = Tarjeta(col_r, titulo="Resultados de la Operación", subtitulo="Equivalencia en números romanos y arábigos con desglose")
-        t_rres.pack(fill=tk.BOTH, expand=True)
+        t_rres.pack(fill=tk.X)
 
         nb_r = ttk.Notebook(t_rres.contenido, style="Sub.TNotebook")
-        nb_r.pack(fill=tk.BOTH, expand=True)
+        nb_r.pack(fill=tk.X)
 
-        self.tab_res_romanos  = tk.Frame(nb_r, bg=BG_CARD, padx=16, pady=20)
-        self.tab_res_normales = tk.Frame(nb_r, bg=BG_CARD, padx=16, pady=20)
+        self.tab_res_romanos  = tk.Frame(nb_r, bg=BG_CARD, padx=10, pady=8)
+        self.tab_res_normales = tk.Frame(nb_r, bg=BG_CARD, padx=10, pady=8)
         self.tab_res_desglose = tk.Frame(nb_r, bg=BG_CARD, padx=10, pady=8)
 
         nb_r.add(self.tab_res_romanos,  text="  Sistema Romano  ")
@@ -1545,20 +1636,22 @@ class VentanaPrincipal:
 
         self.lbl_res_romano = tk.Label(
             self.tab_res_romanos, text="—", font=("Consolas", 24, "bold"),
-            bg=BG_CARD, fg=ACCENT_PRIMARY, anchor="center"
+            bg=BG_CARD, fg=ACCENT_PRIMARY, anchor="nw", justify=tk.LEFT,
         )
-        self.lbl_res_romano.pack(fill=tk.BOTH, expand=True)
+        self.lbl_res_romano.pack(anchor="nw", fill=tk.X)
 
         self.lbl_res_normal = tk.Label(
             self.tab_res_normales, text="—", font=("Consolas", 24, "bold"),
-            bg=BG_CARD, fg=TEXT_PRIMARY, anchor="center"
+            bg=BG_CARD, fg=TEXT_PRIMARY, anchor="nw", justify=tk.LEFT,
         )
-        self.lbl_res_normal.pack(fill=tk.BOTH, expand=True)
+        self.lbl_res_normal.pack(anchor="nw", fill=tk.X)
 
         frame_txt_rom = tk.Frame(self.tab_res_desglose, bg=BG_CARD)
-        frame_txt_rom.pack(fill=tk.BOTH, expand=True)
+        frame_txt_rom.pack(fill=tk.X)
 
-        self.txt_rom_desglose = self._crear_consola(frame_txt_rom, height=16, wrap=tk.WORD)
+        self.txt_rom_desglose = self._crear_consola(
+            frame_txt_rom, height=2, wrap=tk.WORD, autoajustar=True,
+        )
         sc_rom = ttk.Scrollbar(frame_txt_rom, orient="vertical", command=self.txt_rom_desglose.yview)
         self.txt_rom_desglose.configure(yscrollcommand=sc_rom.set)
         self.txt_rom_desglose.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
@@ -1581,6 +1674,7 @@ class VentanaPrincipal:
             e = CeldaMatriz(f, valor_inicial="X" if i == 0 else "V" if i == 1 else "I", width=10)
             e.pack(pady=2)
             self.romanos_entries.append(e)
+        self.scroll_romanos.observar_contenido()
 
     def mostrar_resultados_romanos(self, resultado_dict):
         res_romano  = resultado_dict.get('resultado_romano', '?')
