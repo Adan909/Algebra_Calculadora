@@ -41,8 +41,10 @@ class PruebasBiseccion(unittest.TestCase):
             root.update_idletasks()
             self.assertEqual(vista.biseccion_tabla.selection(), ("0",))
             self.assertTrue(vista.biseccion_tabla.bbox("0"))
-            self.assertIn(f"Punto medio: c = (a + b) / 2 = {primera.c:.10g}",
+            self.assertIn("Punto medio:\nc = (a + b) / 2", vista.biseccion_explicacion.cget("text"))
+            self.assertIn(f"c = (a + b) / 2 = {primera.c:.10g}",
                           vista.biseccion_explicacion.cget("text"))
+            self.assertEqual(vista.biseccion_explicacion.cget("fg"), vista.rf_explicacion.cget("fg"))
         finally:
             for callback in root.tk.call("after", "info"):
                 root.after_cancel(callback)

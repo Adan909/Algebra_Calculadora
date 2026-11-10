@@ -192,7 +192,8 @@ class VentanaPrincipal:
             "Conversión de Bases",
             "Números Romanos",
             "Método de Bisección",
-            "Regla Falsa"
+            "Regla Falsa",
+            "Newton-Raphson",
         ]
         self.nav_segmentada = ControlSegmentado(
             center_box, self.modulos, comando=self._al_cambiar_modulo, initial_index=0
@@ -321,6 +322,18 @@ class VentanaPrincipal:
             estado["rf_root_idx"] = getattr(self, "_raiz_actual_rf", None)
             estado["rf_pan_x"] = getattr(self, "_desplazamiento_x_rf", 0.0)
             estado["rf_pan_y"] = getattr(self, "_desplazamiento_y_rf", 0.0)
+
+            # Newton-Raphson
+            estado["newton_func"] = self.newton_funcion.get() if hasattr(self, "newton_funcion") else ""
+            estado["newton_x"] = self.newton_x_inicial.get() if hasattr(self, "newton_x_inicial") else ""
+            estado["newton_err"] = self.newton_error.get() if hasattr(self, "newton_error") else ""
+            estado["newton_max"] = self.newton_max_iter.get() if hasattr(self, "newton_max_iter") else ""
+            estado["newton_res"] = getattr(self, "_resultado_newton_raphson", None)
+            estado["newton_func_obj"] = getattr(self, "_funcion_grafica_newton", None)
+            estado["newton_zoom"] = getattr(self, "_zoom_newton", 1.0)
+            estado["newton_root_idx"] = getattr(self, "_raiz_actual_newton", None)
+            estado["newton_pan_x"] = getattr(self, "_desplazamiento_x_newton", 0.0)
+            estado["newton_pan_y"] = getattr(self, "_desplazamiento_y_newton", 0.0)
         except Exception:
             pass
         return estado
@@ -496,6 +509,32 @@ class VentanaPrincipal:
                     self._desplazamiento_y_rf = estado.get("rf_pan_y", 0.0)
                     self._dibujar_grafica_rf()
 
+            # Restaurar Newton-Raphson
+            if hasattr(self, "newton_funcion"):
+                self.newton_funcion.delete(0, tk.END)
+                self.newton_funcion.insert(0, estado.get("newton_func", ""))
+                self.newton_x_inicial.delete(0, tk.END)
+                self.newton_x_inicial.insert(0, estado.get("newton_x", ""))
+                self.newton_error.delete(0, tk.END)
+                self.newton_error.insert(0, estado.get("newton_err", ""))
+                self.newton_max_iter.delete(0, tk.END)
+                self.newton_max_iter.insert(0, estado.get("newton_max", ""))
+                if estado.get("newton_res") and estado.get("newton_func_obj"):
+                    self.mostrar_resultado_newton_raphson(
+                        estado["newton_res"], estado["newton_func_obj"],
+                    )
+                elif estado.get("newton_func_obj"):
+                    self.mostrar_grafica_newton_raphson(
+                        estado["newton_func_obj"],
+                    )
+                self._zoom_newton = estado.get("newton_zoom", 1.0)
+                indice_raiz = estado.get("newton_root_idx")
+                if indice_raiz is not None and 0 <= indice_raiz < len(self._raices_newton):
+                    self._mostrar_raiz_newton(indice_raiz)
+                self._desplazamiento_x_newton = estado.get("newton_pan_x", 0.0)
+                self._desplazamiento_y_newton = estado.get("newton_pan_y", 0.0)
+                self._dibujar_grafica_newton()
+
             # Seleccionar pestaña principal
             tab_idx = estado.get("tab_idx", 0)
             if hasattr(self, "nav_segmentada"):
@@ -546,6 +585,7 @@ class VentanaPrincipal:
         self.tab_romanos   = tk.Frame(self.nb_main, bg=BG_WINDOW)
         self.tab_biseccion = tk.Frame(self.nb_main, bg=BG_WINDOW)
         self.tab_rf        = tk.Frame(self.nb_main, bg=BG_WINDOW)
+        self.tab_newton    = tk.Frame(self.nb_main, bg=BG_WINDOW)
 
         self.nb_main.add(self.tab_gauss,     text="Gauss-Jordan")
         self.nb_main.add(self.tab_vectorial, text="Vectorial & Matrices")
@@ -553,6 +593,7 @@ class VentanaPrincipal:
         self.nb_main.add(self.tab_romanos,   text="Números Romanos")
         self.nb_main.add(self.tab_biseccion, text="Método de Bisección")
         self.nb_main.add(self.tab_rf,        text="Regla Falsa")
+        self.nb_main.add(self.tab_newton,    text="Newton-Raphson")
 
         self._build_gauss()
         self._build_vectorial()
@@ -560,6 +601,7 @@ class VentanaPrincipal:
         self._build_romanos()
         self._build_biseccion()
         self._build_regula_falsi()
+        self._build_newton_raphson()
 
     # ==========================================================================
     # HELPERS Y CONSOLA DE PANTALLA COMPLETA
@@ -1681,7 +1723,8 @@ class VentanaPrincipal:
 
         self.biseccion_explicacion = tk.Label(
             t_exp.contenido, text="Carga una función e intervalo con cambio de signo para comenzar.",
-            font=FONT_MONO_SM, bg=BG_CARD, fg=TEXT_SECONDARY, justify=tk.LEFT, anchor="nw", wraplength=380
+            font=(FONT_MONO[0], FONT_MONO[1] + 1), bg=BG_CARD, fg=TEXT_PRIMARY,
+            justify=tk.LEFT, anchor="nw", wraplength=560,
         )
         self.biseccion_explicacion.pack(fill=tk.BOTH, expand=True)
 
@@ -1930,8 +1973,10 @@ class VentanaPrincipal:
                     if fila.criterio_error == "error relativo porcentual"
                     else "Como c = 0, se usa el ancho relativo del intervalo para evitar dividir entre cero.")
         texto = (
+            "Método de Bisección:\n"
             f"Intervalo actual: [{fila.a:.10g}, {fila.b:.10g}]\n"
-            f"Punto medio: c = (a + b) / 2 = {fila.c:.10g}\n"
+            "Punto medio:\n"
+            f"c = (a + b) / 2 = {fila.c:.10g}\n"
             f"f(a) = {fila.fa:.8g}    f(c) = {fila.fc:.8g}\n"
             f"Signo de f(a)·f(c): {fila.signo_producto}\n"
             f"Extremo que cambia: {fila.extremo_modificado}\n"
@@ -2474,7 +2519,8 @@ class VentanaPrincipal:
 
         self.rf_explicacion = tk.Label(
             t_exp.contenido, text="Carga una función e intervalo con cambio de signo para comenzar.",
-            font=FONT_MONO_SM, bg=BG_CARD, fg=TEXT_SECONDARY, justify=tk.LEFT, anchor="nw", wraplength=380
+            font=(FONT_MONO[0], FONT_MONO[1] + 1), bg=BG_CARD, fg=TEXT_PRIMARY,
+            justify=tk.LEFT, anchor="nw", wraplength=560,
         )
         self.rf_explicacion.pack(fill=tk.BOTH, expand=True)
 
@@ -2689,8 +2735,9 @@ class VentanaPrincipal:
         fila = self._resultado_rf.iteraciones[indice]
         error = "aún no se calcula (primera iteración)" if fila.error_relativo is None else f"{fila.error_relativo:.6g} %"
         texto = (
+            "Falsa Posición:\n"
             f"Intervalo actual: xl = {fila.a:.10g}, xu = {fila.b:.10g}\n"
-            f"Falsa Posición: xr = xu - (f(xu)*(xl - xu))/(f(xl) - f(xu)) = {fila.c:.10g}\n"
+            f"xr = xu - (f(xu)*(xl - xu))/(f(xl) - f(xu)) = {fila.c:.10g}\n"
             f"f(xl) = {fila.fa:.8g}    f(xr) = {fila.fc:.8g}\n"
             f"Signo de f(xl)·f(xr): {fila.signo_producto}\n"
             f"Extremo que cambia: {fila.extremo_modificado}\n"
@@ -2876,3 +2923,622 @@ class VentanaPrincipal:
         for item in self.rf_tabla.get_children(): self.rf_tabla.delete(item)
         self.rf_explicacion.config(text="Carga una función e intervalo para comenzar.")
         self._dibujar_grafica_rf()
+
+    def _build_newton_raphson(self):
+        parent = self.tab_newton
+        tarjeta = Tarjeta(
+            parent,
+            titulo="Método de Newton-Raphson · Búsqueda de Raíces",
+            subtitulo="Iteración tangente: x(i+1) = x(i) − f(x(i)) / f'(x(i))",
+        )
+        tarjeta.pack(fill=tk.X, pady=(0, 8))
+
+        fields = tk.Frame(tarjeta.contenido, bg=BG_CARD)
+        fields.pack(fill=tk.X, pady=(0, 6))
+        specs = (
+            ("Función f(x):", "newton_funcion", "x^2 - 2", 32),
+            ("Valor inicial x₀:", "newton_x_inicial", "1.5", 12),
+            ("Error (%) :", "newton_error", "0.0001", 10),
+            ("Máx. Iter:", "newton_max_iter", "20", 8),
+        )
+        for columna, (label, atributo, inicial, ancho) in enumerate(specs):
+            cell = tk.Frame(fields, bg=BG_CARD)
+            cell.grid(row=0, column=columna, sticky="ew", padx=(0, 10))
+            tk.Label(
+                cell, text=label, font=FONT_SMALL_BOLD,
+                bg=BG_CARD, fg=TEXT_PRIMARY,
+            ).pack(anchor="w", pady=(0, 2))
+            if atributo == "newton_max_iter":
+                entry = SpinboxNumerico(
+                    cell, min_val=1, max_val=100000,
+                    initial_val=int(inicial), width=ancho,
+                )
+            else:
+                entry = CeldaMatriz(cell, valor_inicial=inicial, width=ancho)
+            entry.pack(fill=tk.X)
+            setattr(self, atributo, entry)
+            fields.grid_columnconfigure(columna, weight=3 if columna == 0 else 1)
+
+        actions = tk.Frame(tarjeta.contenido, bg=BG_CARD)
+        actions.pack(fill=tk.X, pady=(4, 0))
+        BotonPrimario(
+            actions, text="⚡ CALCULAR RAÍZ",
+            command=self.controlador.calcular_newton_raphson,
+            font=FONT_SMALL_BOLD,
+        ).pack(side=tk.LEFT, padx=(0, 6))
+        BotonSecundario(
+            actions, text="📈 Graficar Función",
+            command=self.controlador.graficar_newton_raphson,
+            font=FONT_SMALL_BOLD,
+        ).pack(side=tk.LEFT, padx=6)
+        BotonSecundario(
+            actions, text="🧹 Limpiar",
+            command=self.limpiar_newton_raphson,
+            font=FONT_SMALL_BOLD,
+        ).pack(side=tk.LEFT, padx=6)
+        BotonSecundario(
+            actions, text="★ Ejemplo x² − 2",
+            command=self.controlador.cargar_ejemplo_newton_raphson,
+            font=FONT_SMALL_BOLD,
+        ).pack(side=tk.LEFT, padx=6)
+        tk.Label(
+            actions, text="Acepta enteros, decimales y fracciones como 3/2",
+            font=FONT_MICRO, bg=BG_CARD, fg=TEXT_MUTED,
+        ).pack(side=tk.RIGHT)
+
+        summary = tk.Frame(parent, bg=BG_WINDOW)
+        summary.pack(fill=tk.X, pady=(0, 8))
+        self.newton_cantidad_raices = self._biseccion_metric(
+            summary, "Raíces reales distintas", "—", TEXT_PRIMARY,
+        )
+        self.newton_raiz = self._biseccion_metric(
+            summary, "Raíz Aproximada", "—", ACCENT_PRIMARY,
+        )
+        self.newton_error_final = self._biseccion_metric(
+            summary, "Error Relativo Final", "—", TEXT_PRIMARY,
+        )
+        self.newton_iteraciones_total = self._biseccion_metric(
+            summary, "Iteraciones", "—", TEXT_PRIMARY,
+        )
+        self.newton_estado = self._biseccion_metric(
+            summary, "Estado", "Esperando datos", TEXT_MUTED,
+        )
+
+        work = tk.Frame(parent, bg=BG_WINDOW)
+        work.pack(fill=tk.BOTH, expand=True, pady=(0, 8))
+        grafica = Tarjeta(
+            work, titulo="Gráfica Interactiva",
+            subtitulo="Arrastra para recorrer · Rueda para zoom · Doble clic para restablecer",
+        )
+        grafica.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 6))
+        navegacion = tk.Frame(grafica.contenido, bg=BG_CARD)
+        navegacion.pack(fill=tk.X, pady=(0, 4))
+        self.newton_raiz_anterior = BotonSecundario(
+            navegacion, text="◀", command=lambda: self._navegar_raiz_newton(-1),
+            font=FONT_SMALL_BOLD, padx=8, pady=2, state=tk.DISABLED,
+        )
+        self.newton_raiz_anterior.pack(side=tk.LEFT, padx=(0, 4))
+        self.newton_raiz_seleccionada = tk.Label(
+            navegacion, text="Conteo numérico disponible solo para polinomios",
+            font=FONT_SMALL, bg=BG_CARD, fg=TEXT_SECONDARY, anchor="w",
+        )
+        self.newton_raiz_seleccionada.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self.newton_raiz_siguiente = BotonSecundario(
+            navegacion, text="▶", command=lambda: self._navegar_raiz_newton(1),
+            font=FONT_SMALL_BOLD, padx=8, pady=2, state=tk.DISABLED,
+        )
+        self.newton_raiz_siguiente.pack(side=tk.RIGHT, padx=(4, 0))
+        self.newton_canvas = tk.Canvas(
+            grafica.contenido, height=260, bg=BG_CARD,
+            highlightthickness=0, bd=0,
+        )
+        self.newton_canvas.pack(fill=tk.BOTH, expand=True)
+        self.newton_canvas.bind(
+            "<Configure>", lambda _event: self._dibujar_grafica_newton(),
+        )
+        self.newton_canvas.bind("<MouseWheel>", self._zoom_grafica_newton)
+        self.newton_canvas.bind("<Button-4>", self._zoom_grafica_newton)
+        self.newton_canvas.bind("<Button-5>", self._zoom_grafica_newton)
+        self.newton_canvas.bind("<ButtonPress-1>", self._iniciar_pan_grafica_newton)
+        self.newton_canvas.bind("<B1-Motion>", self._mover_grafica_newton)
+        self.newton_canvas.bind("<ButtonRelease-1>", self._terminar_pan_grafica_newton)
+        self.newton_canvas.bind("<Double-Button-1>", self._reset_zoom_newton)
+        self._funcion_grafica_newton = None
+        self._iteracion_seleccionada_newton = None
+        self._rango_grafica_newton = None
+        self._raices_newton = ()
+        self._raiz_actual_newton = None
+        self._zoom_newton = 1.0
+        self._desplazamiento_x_newton = 0.0
+        self._desplazamiento_y_newton = 0.0
+        self._escala_x_pan_newton = 1.0
+        self._escala_y_pan_newton = 1.0
+        self._inicio_pan_newton = None
+
+        detalle = Tarjeta(
+            work, titulo="Lectura del Procedimiento",
+            subtitulo="Selecciona una fila para consultar cada sustitución",
+        )
+        detalle.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(6, 0))
+        self.newton_selector = ttk.Combobox(
+            detalle.contenido, state="readonly", width=24,
+        )
+        self.newton_selector.pack(anchor="w", pady=(0, 6))
+        self.newton_selector.bind(
+            "<<ComboboxSelected>>", self._seleccionar_iteracion_newton_raphson,
+        )
+        self.newton_explicacion = tk.Label(
+            detalle.contenido,
+            text="Ingresa una función derivable y un valor inicial para comenzar.",
+            font=(FONT_MONO[0], FONT_MONO[1] + 1), bg=BG_CARD, fg=TEXT_PRIMARY,
+            justify=tk.LEFT, anchor="nw", wraplength=560,
+        )
+        self.newton_explicacion.pack(fill=tk.X, expand=True)
+
+        tabla_tarjeta = Tarjeta(
+            parent, titulo="Tabla de Iteraciones",
+            subtitulo="Valores de la fórmula de Newton-Raphson en cada paso",
+        )
+        tabla_tarjeta.pack(fill=tk.BOTH, expand=True)
+        frame_tabla = tk.Frame(tabla_tarjeta.contenido, bg=BG_CARD)
+        frame_tabla.pack(fill=tk.BOTH, expand=True)
+        frame_tabla.grid_rowconfigure(0, weight=1)
+        frame_tabla.grid_columnconfigure(0, weight=1)
+        columnas = ("i", "x", "fx", "derivada", "siguiente_x", "error")
+        self.newton_tabla = ttk.Treeview(
+            frame_tabla, columns=columnas, show="headings",
+            height=8, selectmode="browse",
+        )
+        encabezados = {
+            "i": ("i", 45),
+            "x": ("x(i)", 130),
+            "fx": ("f(x(i))", 130),
+            "derivada": ("f'(x(i))", 130),
+            "siguiente_x": ("x(i+1)", 130),
+            "error": ("Ea (%)", 110),
+        }
+        for columna, (titulo, ancho) in encabezados.items():
+            self.newton_tabla.heading(columna, text=titulo)
+            self.newton_tabla.column(
+                columna, width=ancho, minwidth=ancho,
+                anchor=tk.CENTER, stretch=columna != "i",
+            )
+        self.newton_tabla.tag_configure(
+            "ultima", background=ACCENT_SOFT, foreground=ACCENT_PRIMARY,
+        )
+        self.newton_tabla.grid(row=0, column=0, sticky="nsew")
+        scroll_y = ttk.Scrollbar(
+            frame_tabla, orient="vertical", command=self.newton_tabla.yview,
+        )
+        scroll_x = ttk.Scrollbar(
+            frame_tabla, orient="horizontal", command=self.newton_tabla.xview,
+        )
+        self.newton_tabla.configure(
+            yscrollcommand=scroll_y.set, xscrollcommand=scroll_x.set,
+        )
+        scroll_y.grid(row=0, column=1, sticky="ns")
+        scroll_x.grid(row=1, column=0, sticky="ew")
+        self.newton_tabla.bind(
+            "<<TreeviewSelect>>", self._seleccionar_fila_newton_raphson,
+        )
+        self._resultado_newton_raphson = None
+        self._dibujar_grafica_newton()
+
+    def _zoom_grafica_newton(self, event):
+        if event.num == 4 or (hasattr(event, "delta") and event.delta > 0):
+            factor = 1.2
+        elif event.num == 5 or (hasattr(event, "delta") and event.delta < 0):
+            factor = 1.0 / 1.2
+        else:
+            return "break"
+        nuevo_zoom = self._zoom_newton * factor
+        if 0.001 <= nuevo_zoom <= 1000.0:
+            self._zoom_newton = nuevo_zoom
+            self._dibujar_grafica_newton()
+        return "break"
+
+    def _iniciar_pan_grafica_newton(self, event):
+        self._inicio_pan_newton = (
+            event.x, event.y, self._desplazamiento_x_newton,
+            self._desplazamiento_y_newton,
+        )
+        self.newton_canvas.configure(cursor="fleur")
+
+    def _mover_grafica_newton(self, event):
+        if self._inicio_pan_newton is None:
+            return
+        x_inicio, y_inicio, pan_x, pan_y = self._inicio_pan_newton
+        ancho = max(1, self.newton_canvas.winfo_width() - 72)
+        alto = max(1, self.newton_canvas.winfo_height() - 56)
+        self._desplazamiento_x_newton = (
+            pan_x - (event.x - x_inicio) * self._escala_x_pan_newton / ancho
+        )
+        self._desplazamiento_y_newton = (
+            pan_y + (event.y - y_inicio) * self._escala_y_pan_newton / alto
+        )
+        self._dibujar_grafica_newton()
+
+    def _terminar_pan_grafica_newton(self, _event=None):
+        self._inicio_pan_newton = None
+        self.newton_canvas.configure(cursor="")
+
+    def _reset_zoom_newton(self, _event=None):
+        self._zoom_newton = 1.0
+        self._desplazamiento_x_newton = 0.0
+        self._desplazamiento_y_newton = 0.0
+        self._dibujar_grafica_newton()
+        return "break"
+
+    def _dibujar_grafica_newton(self):
+        canvas = getattr(self, "newton_canvas", None)
+        if canvas is None:
+            return
+        canvas.delete("all")
+        width, height = canvas.winfo_width(), canvas.winfo_height()
+        if width < 80 or height < 80:
+            return
+        left, right, top, bottom = 54, width - 18, 18, height - 38
+        selected = self._iteracion_seleccionada_newton
+        raiz_seleccionada = (
+            self._raices_newton[self._raiz_actual_newton]
+            if self._raiz_actual_newton is not None else None
+        )
+        if self._rango_grafica_newton is not None:
+            xmin, xmax = self._rango_grafica_newton
+            selected = None
+        elif selected is not None:
+            xmin = min(selected.x, selected.siguiente_x)
+            xmax = max(selected.x, selected.siguiente_x)
+        elif self._resultado_newton_raphson and self._resultado_newton_raphson.iteraciones:
+            primera = self._resultado_newton_raphson.iteraciones[0]
+            xmin = min(primera.x, primera.siguiente_x)
+            xmax = max(primera.x, primera.siguiente_x)
+        elif self._resultado_newton_raphson:
+            xmin = self._resultado_newton_raphson.raiz - 2
+            xmax = self._resultado_newton_raphson.raiz + 2
+        else:
+            xmin, xmax = -2.0, 2.0
+
+        span = xmax - xmin or max(abs(xmin) * 0.2, 1.0)
+        centro = (xmin + xmax) / 2.0
+        span_total = (span * 1.7) / self._zoom_newton
+        xmin = centro - span_total / 2.0 + self._desplazamiento_x_newton
+        xmax = centro + span_total / 2.0 + self._desplazamiento_x_newton
+        self._escala_x_pan_newton = xmax - xmin
+
+        function = self._funcion_grafica_newton
+        points = []
+        if function:
+            samples = max(240, (right - left) * 2)
+            for index in range(samples + 1):
+                x = xmin + (xmax - xmin) * index / samples
+                try:
+                    y = function.evaluar(x)
+                    points.append(
+                        (x, y) if self._es_valor_grafica_valido(y) else None
+                    )
+                except (ValueError, ZeroDivisionError, OverflowError):
+                    points.append(None)
+
+        valores = [point[1] for point in points if point is not None]
+        if selected is not None:
+            valores.extend((selected.fx, selected.siguiente_fx, 0.0))
+        if raiz_seleccionada is not None or self._raices_newton:
+            valores.append(0.0)
+        ymin, ymax = (
+            self._limites_verticales_grafica(valores)
+            if valores else (-1.0, 1.0)
+        )
+        span_y = ymax - ymin
+        ymin -= self._desplazamiento_y_newton
+        ymax -= self._desplazamiento_y_newton
+        self._escala_y_pan_newton = span_y
+        to_x = lambda x: left + (x - xmin) / (xmax - xmin) * (right - left)
+        to_y = lambda y: bottom - (y - ymin) / (ymax - ymin) * (bottom - top)
+
+        for tick in range(5):
+            x = xmin + (xmax - xmin) * tick / 4
+            y = ymin + (ymax - ymin) * tick / 4
+            canvas.create_line(to_x(x), top, to_x(x), bottom, fill=BORDER_SUBTLE)
+            canvas.create_line(left, to_y(y), right, to_y(y), fill=BORDER_SUBTLE)
+            canvas.create_text(
+                to_x(x), bottom + 15, text=f"{x:.4g}",
+                fill=TEXT_MUTED, font=FONT_SMALL,
+            )
+            canvas.create_text(
+                left - 8, to_y(y), text=f"{y:.4g}",
+                fill=TEXT_MUTED, font=FONT_SMALL, anchor="e",
+            )
+        if ymin <= 0 <= ymax:
+            canvas.create_line(left, to_y(0), right, to_y(0), fill=TEXT_MUTED, width=1.5)
+        if xmin <= 0 <= xmax:
+            canvas.create_line(to_x(0), top, to_x(0), bottom, fill=TEXT_MUTED, width=1.5)
+        canvas.create_rectangle(left, top, right, bottom, outline=TEXT_MUTED)
+
+        for segment in self._segmentos_visibles_grafica(points, ymin, ymax):
+            coords = [
+                coordinate for x, y in segment
+                for coordinate in (to_x(x), to_y(y))
+            ]
+            canvas.create_line(
+                *coords, fill=ACCENT_PRIMARY, width=2, tags=("function_trace",),
+            )
+        canvas.create_text(
+            right - 4, top + 8, text="f(x)", fill=ACCENT_PRIMARY,
+            font=FONT_SMALL_BOLD, anchor="e",
+        )
+
+        if raiz_seleccionada is not None and xmin <= raiz_seleccionada <= xmax:
+            x_raiz, y_raiz = to_x(raiz_seleccionada), to_y(0.0)
+            canvas.create_line(
+                x_raiz, top, x_raiz, bottom, fill=SUCCESS_TEXT,
+                dash=(3, 3), tags=("selected_root",),
+            )
+            canvas.create_oval(
+                x_raiz - 5, y_raiz - 5, x_raiz + 5, y_raiz + 5,
+                fill=SUCCESS_TEXT, outline=BG_CARD, width=1,
+                tags=("selected_root",),
+            )
+            canvas.create_text(
+                x_raiz, top + 18, text=f"Raíz {self._raiz_actual_newton + 1}",
+                fill=SUCCESS_TEXT, font=FONT_SMALL_BOLD,
+                tags=("selected_root",),
+            )
+        if abs(self._zoom_newton - 1.0) > 1e-4:
+            canvas.create_text(
+                left + 6, top + 8, text=f"Escala: {self._zoom_newton:.2g}x",
+                fill=TEXT_MUTED, font=FONT_MICRO, anchor="w",
+            )
+
+        if selected is not None:
+            x0, x1 = selected.x, selected.siguiente_x
+            y1_tangente = selected.fx + selected.derivada * (x1 - x0)
+            canvas.create_line(
+                to_x(x0), to_y(selected.fx), to_x(x1), to_y(y1_tangente),
+                fill=WARNING_TEXT, dash=(4, 4), width=1.5,
+                tags=("newton_tangent",),
+            )
+            for x, etiqueta, color in (
+                (x0, "x(i)", WARNING_TEXT),
+                (x1, "x(i+1)", SUCCESS_TEXT),
+            ):
+                canvas.create_line(
+                    to_x(x), top, to_x(x), bottom,
+                    fill=color, dash=(3, 3),
+                )
+                try:
+                    y = function.evaluar(x)
+                    canvas.create_oval(
+                        to_x(x) - 4, to_y(y) - 4, to_x(x) + 4, to_y(y) + 4,
+                        fill=color, outline=BG_CARD, width=1,
+                    )
+                except (ValueError, TypeError, ZeroDivisionError, OverflowError):
+                    pass
+                canvas.create_text(
+                    to_x(x), bottom + 27, text=etiqueta,
+                    fill=color, font=FONT_SMALL_BOLD,
+                )
+            canvas.create_oval(
+                to_x(x1) - 4, to_y(0) - 4, to_x(x1) + 4, to_y(0) + 4,
+                fill=SUCCESS_TEXT, outline=BG_CARD, width=1,
+            )
+            canvas.create_text(
+                right - 4, top + 25, text="Tangente",
+                fill=WARNING_TEXT, font=FONT_MICRO, anchor="e",
+            )
+
+    def mostrar_grafica_newton_raphson(self, funcion):
+        self._funcion_grafica_newton = funcion
+        self._rango_grafica_newton = None
+        self._iteracion_seleccionada_newton = None
+        self._desplazamiento_x_newton = 0.0
+        self._desplazamiento_y_newton = 0.0
+        self._actualizar_raices_newton(funcion)
+        self._zoom_newton = 1.0
+        self._dibujar_grafica_newton()
+
+    def _actualizar_raices_newton(self, funcion):
+        from modelo.raices_polinomiales import encontrar_raices_reales
+
+        self._raiz_actual_newton = None
+        try:
+            analisis = encontrar_raices_reales(funcion)
+        except OverflowError as error:
+            self._raices_newton = ()
+            self.newton_cantidad_raices.config(text="Error")
+            self.newton_raiz_seleccionada.config(text=str(error))
+            self.newton_raiz_anterior.config(state=tk.DISABLED)
+            self.newton_raiz_siguiente.config(state=tk.DISABLED)
+            return
+        if analisis is None:
+            self._raices_newton = ()
+            self.newton_cantidad_raices.config(text="N/D")
+            self.newton_raiz_seleccionada.config(
+                text="Conteo numérico total disponible solo para polinomios."
+            )
+        elif analisis.raices is None:
+            self._raices_newton = ()
+            self.newton_cantidad_raices.config(text="∞")
+            self.newton_raiz_seleccionada.config(
+                text="f(x) = 0: todo número real es raíz."
+            )
+        else:
+            self._raices_newton = analisis.raices
+            self.newton_cantidad_raices.config(text=str(len(self._raices_newton)))
+            self.newton_raiz_seleccionada.config(
+                text="Usa las flechas para mostrar una raíz en la gráfica."
+                if self._raices_newton else "El polinomio no tiene raíces reales."
+            )
+        estado = tk.NORMAL if self._raices_newton else tk.DISABLED
+        self.newton_raiz_anterior.config(state=estado)
+        self.newton_raiz_siguiente.config(state=estado)
+
+    def _navegar_raiz_newton(self, direccion):
+        if not self._raices_newton:
+            return
+        if self._raiz_actual_newton is None:
+            indice = 0 if direccion > 0 else len(self._raices_newton) - 1
+        else:
+            indice = (
+                self._raiz_actual_newton + direccion
+            ) % len(self._raices_newton)
+        self._mostrar_raiz_newton(indice)
+
+    def _mostrar_raiz_newton(self, indice):
+        self._raiz_actual_newton = indice
+        raiz = self._raices_newton[indice]
+        radio = max(1.0, abs(raiz) * 0.1)
+        self._rango_grafica_newton = (raiz - radio, raiz + radio)
+        self._desplazamiento_x_newton = 0.0
+        self._desplazamiento_y_newton = 0.0
+        self.newton_raiz_seleccionada.config(
+            text=f"Raíz {indice + 1}/{len(self._raices_newton)} · x ≈ {raiz:.10g}"
+        )
+        self._dibujar_grafica_newton()
+
+    def mostrar_resultado_newton_raphson(self, resultado, funcion):
+        self._resultado_newton_raphson = resultado
+        self._funcion_grafica_newton = funcion
+        self._rango_grafica_newton = None
+        self._desplazamiento_x_newton = 0.0
+        self._desplazamiento_y_newton = 0.0
+        self._actualizar_raices_newton(funcion)
+        self._zoom_newton = 1.0
+        self.newton_raiz.config(text=f"{resultado.raiz:.10g}")
+        self.newton_error_final.config(
+            text="—" if resultado.error_final is None
+            else f"{resultado.error_final:.6g} %",
+        )
+        self.newton_iteraciones_total.config(text=str(len(resultado.iteraciones)))
+        self.newton_estado.config(
+            text="CONVERGIÓ" if resultado.convergio else "LÍMITE ALCANZADO",
+            fg=SUCCESS_TEXT if resultado.convergio else WARNING_TEXT,
+        )
+        for item in self.newton_tabla.get_children():
+            self.newton_tabla.delete(item)
+        for indice, fila in enumerate(resultado.iteraciones):
+            self.newton_tabla.insert(
+                "", tk.END, iid=str(indice),
+                values=(
+                    fila.numero,
+                    self._numero_biseccion(fila.x),
+                    self._numero_biseccion(fila.fx),
+                    self._numero_biseccion(fila.derivada),
+                    self._numero_biseccion(fila.siguiente_x),
+                    self._numero_biseccion(fila.error_relativo),
+                ),
+                tags=("ultima",) if indice == len(resultado.iteraciones) - 1 else (),
+            )
+        self.newton_selector["values"] = tuple(
+            f"Iteración {fila.numero}" for fila in resultado.iteraciones
+        )
+        if resultado.iteraciones:
+            indice = len(resultado.iteraciones) - 1
+            self.newton_selector.current(indice)
+            self.newton_tabla.selection_set(str(indice))
+            self.newton_tabla.see(str(indice))
+            self._mostrar_iteracion_newton_raphson(indice)
+        else:
+            self.newton_selector.set("")
+            self.newton_explicacion.config(text=resultado.motivo)
+        self._dibujar_grafica_newton()
+        self._ops()
+
+    def _seleccionar_iteracion_newton_raphson(self, _event=None):
+        seleccion = self.newton_selector.get()
+        match = re.search(r"Iteración\s+(\d+)", seleccion)
+        if match and self._resultado_newton_raphson:
+            indice = int(match.group(1)) - 1
+            if 0 <= indice < len(self._resultado_newton_raphson.iteraciones):
+                self._raiz_actual_newton = None
+                self._rango_grafica_newton = None
+                self._desplazamiento_x_newton = 0.0
+                self._desplazamiento_y_newton = 0.0
+                if self._raices_newton:
+                    self.newton_raiz_seleccionada.config(
+                        text="Usa las flechas para mostrar una raíz en la gráfica."
+                    )
+                self.newton_tabla.selection_set(str(indice))
+                self.newton_tabla.see(str(indice))
+                self._mostrar_iteracion_newton_raphson(indice)
+                self._dibujar_grafica_newton()
+
+    def _seleccionar_fila_newton_raphson(self, _event=None):
+        seleccion = self.newton_tabla.selection()
+        if seleccion and self._resultado_newton_raphson:
+            indice = int(seleccion[0])
+            self._raiz_actual_newton = None
+            self._rango_grafica_newton = None
+            self._desplazamiento_x_newton = 0.0
+            self._desplazamiento_y_newton = 0.0
+            if self._raices_newton:
+                self.newton_raiz_seleccionada.config(
+                    text="Usa las flechas para mostrar una raíz en la gráfica."
+                )
+            self.newton_selector.current(indice)
+            self._mostrar_iteracion_newton_raphson(indice)
+            self._dibujar_grafica_newton()
+
+    def _mostrar_iteracion_newton_raphson(self, indice):
+        if not self._resultado_newton_raphson:
+            return
+        fila = self._resultado_newton_raphson.iteraciones[indice]
+        error = (
+            "aún no se calcula (primera iteración)"
+            if fila.error_relativo is None else f"{fila.error_relativo:.6g} %"
+        )
+        criterio = (
+            "Error relativo porcentual entre aproximaciones consecutivas."
+            if fila.criterio_error == "error relativo porcentual"
+            else "Como x(i+1) = 0, se usa un error relativo alternativo."
+        )
+        texto = (
+            "Método de Newton-Raphson:\n"
+            f"Derivada analítica: f'(x) = {self._resultado_newton_raphson.expresion_derivada}\n"
+            f"Iteración {fila.numero}: x(i) = {fila.x:.10g}\n"
+            f"f(x(i)) = {fila.fx:.10g}    f'(x(i)) = {fila.derivada:.10g}\n"
+            "Fórmula de iteración:\n"
+            "x(i+1) = x(i) − f(x(i)) / f'(x(i))\n"
+            f"Sustitución: x(i+1) = {fila.x:.6g} − ({fila.fx:.6g}) / "
+            f"({fila.derivada:.6g})\n"
+            f"= {fila.siguiente_x:.10g}\n"
+            f"f(x(i+1)) = {fila.siguiente_fx:.10g}\n"
+            f"Ea: {error}\n\n{criterio}"
+        )
+        self.newton_explicacion.config(text=texto)
+        self._iteracion_seleccionada_newton = fila
+
+    def limpiar_newton_raphson(self):
+        for atributo in (
+            "newton_funcion", "newton_x_inicial", "newton_error",
+            "newton_max_iter",
+        ):
+            getattr(self, atributo).delete(0, tk.END)
+        self.newton_raiz.config(text="—")
+        self.newton_error_final.config(text="—")
+        self.newton_iteraciones_total.config(text="—")
+        self.newton_estado.config(text="Esperando datos", fg=TEXT_MUTED)
+        self.newton_cantidad_raices.config(text="—")
+        self.newton_raiz_seleccionada.config(
+            text="Conteo numérico disponible solo para polinomios"
+        )
+        self.newton_raiz_anterior.config(state=tk.DISABLED)
+        self.newton_raiz_siguiente.config(state=tk.DISABLED)
+        self._resultado_newton_raphson = None
+        self._funcion_grafica_newton = None
+        self._iteracion_seleccionada_newton = None
+        self._rango_grafica_newton = None
+        self._raices_newton = ()
+        self._raiz_actual_newton = None
+        self._zoom_newton = 1.0
+        self._desplazamiento_x_newton = 0.0
+        self._desplazamiento_y_newton = 0.0
+        self._inicio_pan_newton = None
+        self.newton_selector["values"] = ()
+        self.newton_selector.set("")
+        for item in self.newton_tabla.get_children():
+            self.newton_tabla.delete(item)
+        self.newton_explicacion.config(
+            text="Ingresa una función derivable y un valor inicial para comenzar."
+        )
+        self._dibujar_grafica_newton()

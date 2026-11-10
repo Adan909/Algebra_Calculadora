@@ -2,6 +2,7 @@ from vista.ventana_principal import VentanaPrincipal
 from modelo.solucionador import SolucionadorGauss, SolucionadorGaussJordan, SolucionadorLU
 from modelo.biseccion import FuncionMatematica, biseccion, verificar_continuidad, ResultadoContinuidad
 from modelo.regula_falsi import calcular_regula_falsi
+from modelo.newton_raphson import newton_raphson
 # Importar funciones de modelo
 from modelo.matriz import formatear_fraccion, formatear_matriz
 from modelo.vectores import (
@@ -174,6 +175,40 @@ class Controlador:
         
         self.vista.rf_max_iter.delete(0, 'end')
         self.vista.rf_max_iter.insert(0, "50")
+
+    def calcular_newton_raphson(self):
+        try:
+            funcion = FuncionMatematica(self.vista.newton_funcion.get())
+            resultado = newton_raphson(
+                funcion,
+                self.vista.newton_x_inicial.get().strip(),
+                self.vista.newton_error.get().strip(),
+                self.vista.newton_max_iter.get().strip(),
+            )
+        except (ValueError, OverflowError) as error:
+            self.vista.mostrar_error("Entrada no válida", str(error))
+            return
+        self.vista.mostrar_resultado_newton_raphson(resultado, funcion)
+
+    def graficar_newton_raphson(self):
+        try:
+            funcion = FuncionMatematica(self.vista.newton_funcion.get())
+        except (ValueError, OverflowError) as error:
+            self.vista.mostrar_error("Función no válida", str(error))
+            return
+        self.vista.mostrar_grafica_newton_raphson(funcion)
+
+    def cargar_ejemplo_newton_raphson(self):
+        valores = (
+            (self.vista.newton_funcion, "x^2 - 2"),
+            (self.vista.newton_x_inicial, "1.5"),
+            (self.vista.newton_error, "0.0001"),
+            (self.vista.newton_max_iter, "20"),
+        )
+        for entrada, valor in valores:
+            entrada.delete(0, "end")
+            entrada.insert(0, valor)
+        self.calcular_newton_raphson()
 
     def limpiar_biseccion(self):
         self.vista.limpiar_biseccion()
@@ -753,4 +788,3 @@ class Controlador:
             self.vista.mostrar_resultados_romanos(resultado)
         else:
             self.vista.mostrar_error("Error en Expresión", resultado['error'])
-
