@@ -1,7 +1,7 @@
 from vista.ventana_principal import VentanaPrincipal
 from modelo.solucionador import SolucionadorGauss, SolucionadorGaussJordan, SolucionadorLU
 from modelo.biseccion import FuncionMatematica, biseccion, verificar_continuidad, ResultadoContinuidad
-
+from modelo.regula_falsi import calcular_regula_falsi
 # Importar funciones de modelo
 from modelo.matriz import formatear_fraccion, formatear_matriz
 from modelo.vectores import (
@@ -82,6 +82,81 @@ class Controlador:
             entrada.delete(0, "end")
             entrada.insert(0, valor)
         self.calcular_biseccion()
+
+    def calcular_rf(self):
+        """Ejecuta el método de Regula Falsi capturando los datos de la vista y evaluando continuidad."""
+        try:
+            func_str = self.vista.rf_funcion.get().strip()
+            a_str = self.vista.rf_a.get().strip()
+            b_str = self.vista.rf_b.get().strip()
+            a = float(a_str)
+            b = float(b_str)
+            error_esperado = float(self.vista.rf_error.get())
+            max_iter = int(self.vista.rf_max_iter.get())
+
+            if not func_str:
+                self.vista.mostrar_error("Error", "Debes ingresar una función.")
+                return
+
+            from modelo.biseccion import FuncionMatematica 
+            funcion = FuncionMatematica(func_str)
+
+            # 1. Analizar continuidad automáticamente usando las variables de texto
+            resultado_cont = funcion.analizar_continuidad(a_str, b_str)
+
+            # 2. Llamar al modelo de Regula Falsi
+            from modelo.regula_falsi import calcular_regula_falsi
+            resultado = calcular_regula_falsi(funcion, a, b, error_esperado, max_iter)
+
+            # 3. Adjuntar el análisis de continuidad al resultado final
+            resultado.continuidad = resultado_cont
+
+            # 4. Enviar resultados a la vista
+            self.vista.mostrar_resultado_rf(resultado, funcion)
+
+        except ValueError as e:
+            self.vista.mostrar_error("Error de Valor", str(e))
+        except Exception as e:
+            self.vista.mostrar_error("Error de Cálculo", f"Verifica la función y los intervalos: {str(e)}")
+    def analizar_continuidad_rf(self):
+        try:
+            # 1. Leer los campos de la pestaña de Regula Falsi
+            funcion_str = self.vista.rf_funcion.get().strip()
+            a_str = self.vista.rf_a.get().strip()
+            b_str = self.vista.rf_b.get().strip()
+            
+            if not funcion_str:
+                self.vista.mostrar_error("Entrada no válida", "Por favor ingrese una función matemática.")
+                return
+                
+            # 2. Crear la expresión matemática y analizar (igual que en Bisección)
+            from modelo.biseccion import FuncionMatematica # Solo por si acaso no está importada
+            expresion = FuncionMatematica(funcion_str)
+            resultado_cont = expresion.analizar_continuidad(a_str, b_str)
+            
+        except (ValueError, OverflowError) as error:
+            self.vista.mostrar_error("Error de Continuidad", str(error))
+            return
+            
+        # 3. Mandar el resultado al mismo modal que ya usas
+        self.vista.mostrar_demostracion_continuidad(resultado_cont)
+
+    def cargar_ejemplo_rf(self):
+        """Carga un ejemplo predefinido para Regula Falsi."""
+        self.vista.rf_funcion.delete(0, 'end')
+        self.vista.rf_funcion.insert(0, "x^3 + 4*x^2 - 10")
+        
+        self.vista.rf_a.delete(0, 'end')
+        self.vista.rf_a.insert(0, "1")
+        
+        self.vista.rf_b.delete(0, 'end')
+        self.vista.rf_b.insert(0, "2")
+        
+        self.vista.rf_error.delete(0, 'end')
+        self.vista.rf_error.insert(0, "0.1")
+        
+        self.vista.rf_max_iter.delete(0, 'end')
+        self.vista.rf_max_iter.insert(0, "50")
 
     def limpiar_biseccion(self):
         self.vista.limpiar_biseccion()

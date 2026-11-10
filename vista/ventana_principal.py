@@ -7,6 +7,7 @@ y con un flujo de trabajo optimizado para herramientas científicas y educativas
 import tkinter as tk
 from tkinter import ttk, messagebox
 import time
+import re
 from fractions import Fraction
 
 import vista.tema as tema
@@ -152,7 +153,7 @@ class VentanaPrincipal:
             relief="flat", gripcount=0)
         s.map("TScrollbar", background=[("active", ACCENT_SOFT)])
 
-        # Treeview (para Bisección)
+        # Treeview
         s.configure("Treeview",
             background=BG_CARD, fieldbackground=BG_CARD, foreground=TEXT_PRIMARY,
             bordercolor=BORDER_SUBTLE, rowheight=26, font=FONT_MONO_SM)
@@ -164,14 +165,13 @@ class VentanaPrincipal:
             foreground=[("selected", ACCENT_PRIMARY)])
 
     # ==========================================================================
-    # ENCABEZADO (HEADER COMPACTO EN TEMA CLARO)
+    # ENCABEZADO
     # ==========================================================================
     def _construir_header(self):
         header_bar = tk.Frame(self._contenido_scroll, bg=BG_CARD, height=54)
         header_bar.pack(fill=tk.X, side=tk.TOP)
         header_bar.pack_propagate(False)
 
-        # Lado izquierdo: Identidad de la aplicación
         left_box = tk.Frame(header_bar, bg=BG_CARD)
         left_box.pack(side=tk.LEFT, fill=tk.Y, padx=(18, 10))
 
@@ -182,7 +182,6 @@ class VentanaPrincipal:
         lbl_logo.pack(side=tk.LEFT, pady=12)
         Tooltip(lbl_logo, "Motor de Álgebra Lineal & Métodos Numéricos\nPrecisión Racional Exacta con fracciones continuas")
 
-        # Centro: Control segmentado de navegación entre módulos
         center_box = tk.Frame(header_bar, bg=BG_CARD)
         center_box.pack(side=tk.LEFT, fill=tk.Y, expand=True)
 
@@ -191,14 +190,14 @@ class VentanaPrincipal:
             "Vectorial & Matrices",
             "Conversión de Bases",
             "Números Romanos",
-            "Método de Bisección"
+            "Método de Bisección",
+            "Regla Falsa"
         ]
         self.nav_segmentada = ControlSegmentado(
             center_box, self.modulos, comando=self._al_cambiar_modulo, initial_index=0
         )
         self.nav_segmentada.pack(side=tk.LEFT, pady=10)
 
-        # Lado derecho: Reloj discreto, interruptor de modo oscuro y estado
         right_box = tk.Frame(header_bar, bg=BG_CARD)
         right_box.pack(side=tk.RIGHT, fill=tk.Y, padx=(10, 18))
 
@@ -214,7 +213,6 @@ class VentanaPrincipal:
         self.lbl_clock.pack(side=tk.RIGHT, pady=16)
         Tooltip(self.lbl_clock, "Hora local del sistema")
 
-        # Borde inferior fino de separación
         tk.Frame(self._contenido_scroll, bg=BORDER_SUBTLE, height=1).pack(fill=tk.X, side=tk.TOP)
 
     def _al_cambiar_modulo(self, index, nombre):
@@ -225,14 +223,9 @@ class VentanaPrincipal:
     # GESTIÓN Y CONMUTACIÓN DINÁMICA DE TEMA (CLARO / OSCURO)
     # ==========================================================================
     def alternar_tema(self):
-        """
-        Alterna el tema visual de la aplicación entre Claro y Oscuro, preservando
-        íntegramente el estado de todas las entradas, resultados y navegación activa.
-        """
         estado = self._guardar_estado()
         nuevo_tema = tema.alternar_tema()
 
-        # Sincronizar variables de módulo en ventana_principal
         import sys
         mod = sys.modules[__name__]
         for k, v in tema.PALETAS[nuevo_tema].items():
@@ -242,9 +235,6 @@ class VentanaPrincipal:
         self._restaurar_estado(estado)
 
     def _reconstruir_ui(self):
-        """
-        Reconfigura el lienzo global y reconstruye los componentes visuales con la paleta activa.
-        """
         self.root.configure(bg=BG_WINDOW)
         self._scroll_canvas.configure(bg=BG_WINDOW)
         self._contenido_scroll.configure(bg=BG_WINDOW)
@@ -258,9 +248,6 @@ class VentanaPrincipal:
         self._construir_cuerpo()
 
     def _guardar_estado(self):
-        """
-        Captura el estado completo de los módulos para su restauración fiel tras el cambio de tema.
-        """
         estado = {}
         try:
             estado["tab_idx"] = self.nav_segmentada.seleccionado if hasattr(self, "nav_segmentada") else 0
@@ -317,14 +304,21 @@ class VentanaPrincipal:
             estado["bis_res"] = getattr(self, "_resultado_biseccion", None)
             estado["bis_func_obj"] = getattr(self, "_funcion_grafica_biseccion", None)
             estado["bis_zoom"] = getattr(self, "_zoom_biseccion", 1.0)
+            
+            # Regla Falsa
+            estado["rf_func"] = self.rf_funcion.get() if hasattr(self, "rf_funcion") else ""
+            estado["rf_a"] = self.rf_a.get() if hasattr(self, "rf_a") else ""
+            estado["rf_b"] = self.rf_b.get() if hasattr(self, "rf_b") else ""
+            estado["rf_err"] = self.rf_error.get() if hasattr(self, "rf_error") else ""
+            estado["rf_max"] = self.rf_max_iter.get() if hasattr(self, "rf_max_iter") else ""
+            estado["rf_res"] = getattr(self, "_resultado_rf", None)
+            estado["rf_func_obj"] = getattr(self, "_funcion_grafica_rf", None)
+            estado["rf_zoom"] = getattr(self, "_zoom_rf", 1.0)
         except Exception:
             pass
         return estado
 
     def _restaurar_estado(self, estado):
-        """
-        Restaura fielmente los valores, cuadrículas y resultados guardados.
-        """
         if not estado:
             return
         try:
@@ -434,20 +428,38 @@ class VentanaPrincipal:
                 self.mostrar_resultado_romanos(estado["rom_res"])
 
             # Restaurar Bisección
-            self.biseccion_funcion.delete(0, tk.END)
-            self.biseccion_funcion.insert(0, estado.get("bis_func", ""))
-            self.biseccion_a.delete(0, tk.END)
-            self.biseccion_a.insert(0, estado.get("bis_a", ""))
-            self.biseccion_b.delete(0, tk.END)
-            self.biseccion_b.insert(0, estado.get("bis_b", ""))
-            self.biseccion_error.delete(0, tk.END)
-            self.biseccion_error.insert(0, estado.get("bis_err", ""))
-            self.biseccion_max_iter.delete(0, tk.END)
-            self.biseccion_max_iter.insert(0, estado.get("bis_max", ""))
-            if estado.get("bis_res") and estado.get("bis_func_obj"):
-                self.mostrar_resultado_biseccion(estado["bis_res"], estado["bis_func_obj"])
-                self._zoom_biseccion = estado.get("bis_zoom", 1.0)
-                self._dibujar_grafica_biseccion()
+            if hasattr(self, "biseccion_funcion"):
+                self.biseccion_funcion.delete(0, tk.END)
+                self.biseccion_funcion.insert(0, estado.get("bis_func", ""))
+                self.biseccion_a.delete(0, tk.END)
+                self.biseccion_a.insert(0, estado.get("bis_a", ""))
+                self.biseccion_b.delete(0, tk.END)
+                self.biseccion_b.insert(0, estado.get("bis_b", ""))
+                self.biseccion_error.delete(0, tk.END)
+                self.biseccion_error.insert(0, estado.get("bis_err", ""))
+                self.biseccion_max_iter.delete(0, tk.END)
+                self.biseccion_max_iter.insert(0, estado.get("bis_max", ""))
+                if estado.get("bis_res") and estado.get("bis_func_obj"):
+                    self.mostrar_resultado_biseccion(estado["bis_res"], estado["bis_func_obj"])
+                    self._zoom_biseccion = estado.get("bis_zoom", 1.0)
+                    self._dibujar_grafica_biseccion()
+                    
+            # Restaurar Regla Falsa
+            if hasattr(self, "rf_funcion"):
+                self.rf_funcion.delete(0, tk.END)
+                self.rf_funcion.insert(0, estado.get("rf_func", ""))
+                self.rf_a.delete(0, tk.END)
+                self.rf_a.insert(0, estado.get("rf_a", ""))
+                self.rf_b.delete(0, tk.END)
+                self.rf_b.insert(0, estado.get("rf_b", ""))
+                self.rf_error.delete(0, tk.END)
+                self.rf_error.insert(0, estado.get("rf_err", ""))
+                self.rf_max_iter.delete(0, tk.END)
+                self.rf_max_iter.insert(0, estado.get("rf_max", ""))
+                if estado.get("rf_res") and estado.get("rf_func_obj"):
+                    self.mostrar_resultado_rf(estado["rf_res"], estado["rf_func_obj"])
+                    self._zoom_rf = estado.get("rf_zoom", 1.0)
+                    self._dibujar_grafica_rf()
 
             # Seleccionar pestaña principal
             tab_idx = estado.get("tab_idx", 0)
@@ -488,7 +500,6 @@ class VentanaPrincipal:
         container = tk.Frame(self._contenido_scroll, bg=BG_WINDOW)
         container.pack(fill=tk.BOTH, expand=True, padx=16, pady=12)
 
-        # Ocultamos la barra nativa de pestañas de ttk para usar nuestro ControlSegmentado
         s = ttk.Style()
         s.layout("Hidden.TNotebook.Tab", [])
         self.nb_main = ttk.Notebook(container, style="Hidden.TNotebook")
@@ -499,18 +510,21 @@ class VentanaPrincipal:
         self.tab_conv      = tk.Frame(self.nb_main, bg=BG_WINDOW)
         self.tab_romanos   = tk.Frame(self.nb_main, bg=BG_WINDOW)
         self.tab_biseccion = tk.Frame(self.nb_main, bg=BG_WINDOW)
+        self.tab_rf        = tk.Frame(self.nb_main, bg=BG_WINDOW)
 
         self.nb_main.add(self.tab_gauss,     text="Gauss-Jordan")
         self.nb_main.add(self.tab_vectorial, text="Vectorial & Matrices")
         self.nb_main.add(self.tab_conv,      text="Conversión de Bases")
         self.nb_main.add(self.tab_romanos,   text="Números Romanos")
         self.nb_main.add(self.tab_biseccion, text="Método de Bisección")
+        self.nb_main.add(self.tab_rf,        text="Regla Falsa")
 
         self._build_gauss()
         self._build_vectorial()
         self._build_conv()
         self._build_romanos()
         self._build_biseccion()
+        self._build_regula_falsi()
 
     # ==========================================================================
     # HELPERS Y CONSOLA DE PANTALLA COMPLETA
@@ -713,12 +727,11 @@ class VentanaPrincipal:
             pass
 
     # ==========================================================================
-    # MÓDULO 1 — GAUSS-JORDAN (REDIEÑO COMPLETO EN TEMA CLARO)
+    # MÓDULO 1 — GAUSS-JORDAN
     # ==========================================================================
     def _build_gauss(self):
         parent = self.tab_gauss
 
-        # ── Barra de Indicador de 3 Pasos ─────────────────────────────────────
         pasos_bar = tk.Frame(parent, bg=BG_CARD, highlightthickness=1, highlightbackground=BORDER_SUBTLE)
         pasos_bar.pack(fill=tk.X, pady=(0, 10))
 
@@ -754,7 +767,6 @@ class VentanaPrincipal:
             if i < 2:
                 tk.Label(pasos_bar, text="→", font=FONT_SUBHEAD, bg=BG_CARD, fg=BORDER_SUBTLE).pack(side=tk.LEFT)
 
-        # ── Layout de Dos Columnas (Izquierda: Config + Matriz / Derecha: Resultados) ──
         cols_frame = tk.Frame(parent, bg=BG_WINDOW)
         cols_frame.pack(fill=tk.BOTH, expand=True)
 
@@ -764,24 +776,20 @@ class VentanaPrincipal:
         col_der = tk.Frame(cols_frame, bg=BG_WINDOW)
         col_der.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(6, 0))
 
-        # ── TARJETA: Parámetros del Sistema ───────────────────────────────────
         tarjeta_cfg = Tarjeta(col_izq, titulo="Parámetros del Sistema", subtitulo="Selección de dimensiones y algoritmo de solución")
         tarjeta_cfg.pack(fill=tk.X, pady=(0, 8))
 
         row_cfg = tk.Frame(tarjeta_cfg.contenido, bg=BG_CARD)
         row_cfg.pack(fill=tk.X)
 
-        # Spinbox Filas m
         tk.Label(row_cfg, text="Filas (m):", font=FONT_SMALL_BOLD, bg=BG_CARD, fg=TEXT_PRIMARY).pack(side=tk.LEFT, padx=(0, 4))
         self.spin_m = SpinboxNumerico(row_cfg, min_val=1, max_val=10, initial_val=3, on_change=self._al_cambiar_dimensiones)
         self.spin_m.pack(side=tk.LEFT, padx=(0, 12))
 
-        # Spinbox Columnas n
         tk.Label(row_cfg, text="Columnas (n):", font=FONT_SMALL_BOLD, bg=BG_CARD, fg=TEXT_PRIMARY).pack(side=tk.LEFT, padx=(0, 4))
         self.spin_n = SpinboxNumerico(row_cfg, min_val=1, max_val=10, initial_val=3, on_change=self._al_cambiar_dimensiones)
         self.spin_n.pack(side=tk.LEFT, padx=(0, 14))
 
-        # Selector de Método
         tk.Label(row_cfg, text="Algoritmo:", font=FONT_SMALL_BOLD, bg=BG_CARD, fg=TEXT_PRIMARY).pack(side=tk.LEFT, padx=(0, 4))
         self.metodo = tk.StringVar(value="Gauss")
         self.selector_metodo = ttk.Combobox(
@@ -793,7 +801,6 @@ class VentanaPrincipal:
 
         BotonSecundario(row_cfg, text="Regenerar", command=self.controlador.generar_cuadricula, font=FONT_SMALL_BOLD).pack(side=tk.LEFT)
 
-        # ── TARJETA: Sistemas Precargados (Chips Semánticos) ───────────────────
         tarjeta_presets = Tarjeta(col_izq, titulo="Sistemas Precargados", subtitulo="Prueba configuraciones y tipos de solución predefinidos")
         tarjeta_presets.pack(fill=tk.X, pady=(0, 8))
 
@@ -815,7 +822,6 @@ class VentanaPrincipal:
             )
             chip.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=3)
 
-        # ── TARJETA: Matriz Aumentada [A | b] ─────────────────────────────────
         tarjeta_matriz = Tarjeta(col_izq, titulo="Matriz Aumentada [ A | b ]", subtitulo="Navega con Tab / Flechas. Se aceptan fracciones (ej: 1/2, -3/4)")
         tarjeta_matriz.pack(fill=tk.BOTH, expand=True)
 
@@ -825,7 +831,6 @@ class VentanaPrincipal:
         self.matriz_entries = []
         self.vector_entries = []
 
-        # Botón Principal de Resolución Destacado
         btn_box = tk.Frame(tarjeta_matriz.contenido, bg=BG_CARD)
         btn_box.pack(fill=tk.X, pady=(4, 0))
 
@@ -838,25 +843,21 @@ class VentanaPrincipal:
         self.root.bind("<Control-Return>", lambda e: self.controlador.resolver_sistema())
         self.root.bind("<Control-KP_Enter>", lambda e: self.controlador.resolver_sistema())
 
-        # ── COLUMNA DERECHA: RESULTADOS Y DIAGNÓSTICO ──────────────────────────
         tarjeta_res = Tarjeta(col_der, titulo="Resultados del Análisis", subtitulo="Diagnóstico matemático e historial de pivoteo")
         tarjeta_res.pack(fill=tk.BOTH, expand=True)
 
         self.nb_gauss_res = ttk.Notebook(tarjeta_res.contenido, style="Sub.TNotebook")
         self.nb_gauss_res.pack(fill=tk.BOTH, expand=True)
 
-        # Pestaña 1: Diagnóstico & Solución
         t_diag = tk.Frame(self.nb_gauss_res, bg=BG_CARD, padx=12, pady=10)
         self.nb_gauss_res.add(t_diag, text="  Diagnóstico & Solución  ")
 
-        # Badge Grande de Clasificación
         self.badge_clasificacion = BadgeEstado(t_diag, text="SIN CALCULAR AÚN", tipo="neutral")
         self.badge_clasificacion.pack(anchor="w", pady=(0, 10))
 
         cols_diag = tk.Frame(t_diag, bg=BG_CARD)
         cols_diag.pack(fill=tk.BOTH, expand=True)
 
-        # Vector Solución
         box_sol = tk.Frame(cols_diag, bg=BG_CARD)
         box_sol.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 5))
 
@@ -864,7 +865,6 @@ class VentanaPrincipal:
         self.txt_solucion = self._crear_consola(box_sol, height=9)
         self.txt_solucion.pack(fill=tk.BOTH, expand=True)
 
-        # Comprobación de Ecuaciones
         box_ver = tk.Frame(cols_diag, bg=BG_CARD)
         box_ver.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(5, 0))
 
@@ -872,7 +872,6 @@ class VentanaPrincipal:
         self.txt_verificacion = self._crear_consola(box_ver, height=9)
         self.txt_verificacion.pack(fill=tk.BOTH, expand=True)
 
-        # Pestaña 2: Historial de Pivoteo
         t_hist = tk.Frame(self.nb_gauss_res, bg=BG_CARD, padx=10, pady=8)
         self.nb_gauss_res.add(t_hist, text="  Historial de Pivoteo Paso a Paso  ")
 
@@ -896,7 +895,6 @@ class VentanaPrincipal:
 
         self._conectar_consola_fullscreen(self.txt_historial, "Historial de Pivoteo Gauss-Jordan", bar_h)
 
-        # ── Barra de Acciones Rápidas (Abajo en la tarjeta de resultados) ─────
         acciones_bar = tk.Frame(tarjeta_res.contenido, bg=BG_CARD)
         acciones_bar.pack(fill=tk.X, pady=(8, 0))
 
@@ -928,14 +926,12 @@ class VentanaPrincipal:
         btn_fs.pack(side=tk.RIGHT)
         Tooltip(btn_fs, "Abre los resultados en pantalla completa para proyectar")
 
-        # Construir matriz inicial de 3x3
         self.construir_cuadricula(3, 3)
 
     def _al_cambiar_dimensiones(self, _val=None):
         try:
             m = int(self.spin_m.get())
             n = int(self.spin_n.get())
-            # Conservar valores actuales si existen
             valores_anteriores = []
             if self.matriz_entries:
                 for fila in self.matriz_entries:
@@ -944,7 +940,6 @@ class VentanaPrincipal:
 
             self.construir_cuadricula(m, n)
 
-            # Restaurar valores donde coincidan dimensiones
             for i in range(min(m, len(valores_anteriores))):
                 for j in range(min(n, len(valores_anteriores[i]))):
                     self.matriz_entries[i][j].delete(0, tk.END)
@@ -956,7 +951,6 @@ class VentanaPrincipal:
             pass
 
     def construir_cuadricula(self, m, n):
-        # Guardar estado para deshacer
         if self.matriz_entries:
             estado = {
                 "A": [[e.get() for e in fila] for fila in self.matriz_entries],
@@ -973,19 +967,16 @@ class VentanaPrincipal:
         self.vector_entries = []
         c = self.scroll_matriz.scrollable_frame
 
-        # Encabezados de Columna (x₁, x₂, ... | b)
         for j in range(n):
             tk.Label(
                 c, text=f"x{j+1}", font=FONT_SMALL_BOLD, bg=BG_CARD, fg=TEXT_SECONDARY
             ).grid(row=0, column=j+1, padx=3, pady=(0, 6))
 
-        # Separador visual entre A y b
         tk.Label(c, text="│", font=FONT_MONO_BOLD, bg=BG_CARD, fg=ACCENT_PRIMARY).grid(row=0, column=n+1, padx=4)
 
         lbl_b = tk.Label(c, text="b", font=FONT_SMALL_BOLD, bg=ACCENT_SOFT, fg=ACCENT_PRIMARY, padx=8)
         lbl_b.grid(row=0, column=n+2, padx=3, pady=(0, 6))
 
-        # Celdas numéricas
         for i in range(m):
             tk.Label(
                 c, text=f"E{i+1}", font=FONT_MICRO, bg=BG_CARD, fg=TEXT_MUTED
@@ -1126,7 +1117,6 @@ class VentanaPrincipal:
         self.nb_vectorial = ttk.Notebook(parent, style="Sub.TNotebook")
         self.nb_vectorial.pack(fill=tk.BOTH, expand=True)
 
-        # ── SUB-TAB: Vectores en R^n ──────────────────────────────────────────
         tv = tk.Frame(self.nb_vectorial, bg=BG_WINDOW)
         self.nb_vectorial.add(tv, text="  Vectores en R^n  ")
 
@@ -1139,7 +1129,6 @@ class VentanaPrincipal:
         v_der = tk.Frame(cols_v, bg=BG_WINDOW)
         v_der.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(6, 0))
 
-        # Tarjeta Config Vectores
         t_vcfg = Tarjeta(v_izq, titulo="Parámetros de Vectores", subtitulo="Suma, resta, ponderación y combinación lineal")
         t_vcfg.pack(fill=tk.X, pady=(0, 8))
 
@@ -1160,7 +1149,6 @@ class VentanaPrincipal:
         self.entrada_escalar_vector = CeldaMatriz(row_v, valor_inicial="1", width=5)
         self.entrada_escalar_vector.pack(side=tk.LEFT)
 
-        # Tarjeta Entradas de Vectores
         t_vinp = Tarjeta(v_izq, titulo="Componentes de los Vectores", subtitulo="Ingresa los valores de v₁...vk y el vector objetivo b")
         t_vinp.pack(fill=tk.BOTH, expand=True)
 
@@ -1174,7 +1162,6 @@ class VentanaPrincipal:
             command=self.controlador.operar_vectores, font=FONT_HEADING
         ).pack(fill=tk.X)
 
-        # Tarjeta Resultados Vectores
         t_vres = Tarjeta(v_der, titulo="Resultados Vectoriales", subtitulo="Operaciones algebraicas y dependencia lineal")
         t_vres.pack(fill=tk.BOTH, expand=True)
 
@@ -1189,7 +1176,6 @@ class VentanaPrincipal:
 
         self._conectar_consola_fullscreen(self.txt_res_vectores, "Operaciones Vectoriales")
 
-        # ── SUB-TAB: Álgebra Matricial ────────────────────────────────────────
         tm = tk.Frame(self.nb_vectorial, bg=BG_WINDOW)
         self.tab_sub_matrices = tm
         self.nb_vectorial.add(tm, text="  Álgebra Matricial (A+B, A×B, A⁻¹, LU)  ")
@@ -1203,7 +1189,6 @@ class VentanaPrincipal:
         m_der = tk.Frame(cols_m, bg=BG_WINDOW)
         m_der.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(6, 0))
 
-        # Tarjeta Dimensiones Matrices
         t_mcfg = Tarjeta(m_izq, titulo="Dimensiones y Presets", subtitulo="Configura filas y columnas de las matrices A y B")
         t_mcfg.pack(fill=tk.X, pady=(0, 8))
 
@@ -1220,14 +1205,12 @@ class VentanaPrincipal:
 
         BotonSecundario(row_m1, text="Generar", command=self.controlador.generar_matrices_ops, font=FONT_SMALL_BOLD).pack(side=tk.LEFT)
 
-        # Presets para Matrices
         row_mej = tk.Frame(t_mcfg.contenido, bg=BG_CARD)
         row_mej.pack(fill=tk.X)
         tk.Label(row_mej, text="Presets:", font=FONT_MICRO, bg=BG_CARD, fg=TEXT_MUTED).pack(side=tk.LEFT, padx=(0, 6))
         for lbl, tipo in [("Inv 2×2", "inv_2x2"), ("Inv 3×3", "inv_3x3"), ("Singular", "inv_singular"), ("LU 3×3", "lu_3x3"), ("LU Pivot", "lu_pivoteo")]:
             BotonFantasma(row_mej, text=lbl, command=lambda t=tipo: self.controlador.cargar_ejemplo_matrices(t)).pack(side=tk.LEFT, padx=2)
 
-        # Tarjeta Celdas Matrices A y B
         t_minp = Tarjeta(m_izq, titulo="Matrices A y B", subtitulo="Ingresa los coeficientes numéricos")
         t_minp.pack(fill=tk.BOTH, expand=True, pady=(0, 8))
 
@@ -1236,7 +1219,6 @@ class VentanaPrincipal:
         self.mat_entries_a = []
         self.mat_entries_b = []
 
-        # Tarjeta Operaciones Matriciales
         t_mops = Tarjeta(m_izq, titulo="Operaciones Disponibles", subtitulo="Aritmética, inversión, descomposición LU y determinantes")
         t_mops.pack(fill=tk.X)
 
@@ -1260,7 +1242,6 @@ class VentanaPrincipal:
         BotonSecundario(row_op2, text="det(A) Sarrus", command=lambda: self.controlador.operar_matrices("determinante_sarrus"), font=FONT_SMALL_BOLD, padx=6, pady=4).pack(side=tk.LEFT, padx=2)
         BotonSecundario(row_op2, text="det(A) Cofact.", command=lambda: self.controlador.operar_matrices("determinante_cofactores"), font=FONT_SMALL_BOLD, padx=6, pady=4).pack(side=tk.LEFT, padx=2)
 
-        # Tarjeta Resultados Matrices
         t_mres = Tarjeta(m_der, titulo="Resultados del Cálculo Matricial", subtitulo="Matrices resultantes y desglose analítico paso a paso")
         t_mres.pack(fill=tk.BOTH, expand=True)
 
@@ -1280,7 +1261,6 @@ class VentanaPrincipal:
 
         self._conectar_consola_fullscreen(self.txt_res_matrices, "Álgebra Matricial")
 
-        # Inicialización de vectores y matrices
         self.construir_vectores(3, 2)
         self.construir_matrices_ops(2, 2, 2, 2)
 
@@ -1321,7 +1301,6 @@ class VentanaPrincipal:
         self.mat_entries_b = []
         c = self.scroll_matrices_ops.scrollable_frame
 
-        # Matriz A
         tk.Label(c, text=f"Matriz A ({m_a}×{n_a})", font=FONT_SMALL_BOLD, bg=BG_CARD, fg=ACCENT_PRIMARY).grid(row=0, column=0, columnspan=n_a+2, pady=(0, 4))
         for i in range(m_a):
             tk.Label(c, text="[", font=FONT_MONO_LG, bg=BG_CARD, fg=ACCENT_PRIMARY).grid(row=i+1, column=0)
@@ -1334,7 +1313,6 @@ class VentanaPrincipal:
             tk.Label(c, text="]", font=FONT_MONO_LG, bg=BG_CARD, fg=ACCENT_PRIMARY).grid(row=i+1, column=n_a+1)
 
         off = n_a + 3
-        # Matriz B
         tk.Label(c, text=f"Matriz B ({m_b}×{n_b})", font=FONT_SMALL_BOLD, bg=BG_CARD, fg=TEXT_SECONDARY).grid(row=0, column=off, columnspan=n_b+2, pady=(0, 4))
         for i in range(m_b):
             tk.Label(c, text="[", font=FONT_MONO_LG, bg=BG_CARD, fg=TEXT_SECONDARY).grid(row=i+1, column=off)
@@ -1342,8 +1320,7 @@ class VentanaPrincipal:
             for j in range(n_b):
                 celda = CeldaMatriz(c, valor_inicial="0", width=6)
                 celda.grid(row=i+1, column=j+off+1, padx=2, pady=2)
-                fila.append(celda)
-            self.mat_entries_b.append(fila)
+                self.mat_entries_b.append(fila)
             tk.Label(c, text="]", font=FONT_MONO_LG, bg=BG_CARD, fg=TEXT_SECONDARY).grid(row=i+1, column=n_b+off+1)
 
     def mostrar_resultado_matrices(self, t):
@@ -1365,7 +1342,6 @@ class VentanaPrincipal:
         col_r = tk.Frame(cols, bg=BG_WINDOW)
         col_r.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(6, 0))
 
-        # Tarjeta 1: Hacia Decimal
         t_hacia = Tarjeta(col_l, titulo="Hacia Decimal", subtitulo="Descomposición polinómica con base radix")
         t_hacia.pack(fill=tk.X, pady=(0, 10))
 
@@ -1385,7 +1361,6 @@ class VentanaPrincipal:
             command=self.controlador.convertir_a_decimal, font=FONT_SMALL_BOLD
         ).pack(fill=tk.X)
 
-        # Tarjeta 2: Desde Decimal
         t_desde = Tarjeta(col_l, titulo="Desde Decimal", subtitulo="Conversión mediante divisiones sucesivas")
         t_desde.pack(fill=tk.X)
 
@@ -1405,7 +1380,6 @@ class VentanaPrincipal:
             command=self.controlador.convertir_desde_decimal, font=FONT_SMALL_BOLD
         ).pack(fill=tk.X)
 
-        # Tarjeta Derecha: Consola de Desglose
         t_res = Tarjeta(col_r, titulo="Desglose y Procedimiento de Conversión", subtitulo="Pasos detallados de la conversión matemática")
         t_res.pack(fill=tk.BOTH, expand=True)
 
@@ -1439,7 +1413,6 @@ class VentanaPrincipal:
         col_r = tk.Frame(cols, bg=BG_WINDOW)
         col_r.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(6, 0))
 
-        # Tarjeta Configuración Romanos
         t_rcfg = Tarjeta(col_l, titulo="Aritmética y Conversión Romana", subtitulo="Configura operandos y la operación a ejecutar")
         t_rcfg.pack(fill=tk.X, pady=(0, 8))
 
@@ -1461,14 +1434,12 @@ class VentanaPrincipal:
         )
         self.combo_op_romanos.pack(side=tk.LEFT)
 
-        # Presets
         row_rej = tk.Frame(t_rcfg.contenido, bg=BG_CARD)
         row_rej.pack(fill=tk.X)
         tk.Label(row_rej, text="Ejemplos:", font=FONT_MICRO, bg=BG_CARD, fg=TEXT_MUTED).pack(side=tk.LEFT, padx=(0, 6))
         for lbl, tipo in [("Suma (3)", "suma3"), ("Multiplicación", "mult"), ("División", "div"), ("Resta (3)", "resta3")]:
             BotonFantasma(row_rej, text=lbl, command=lambda t=tipo: self.controlador.cargar_ejemplo_romanos(t)).pack(side=tk.LEFT, padx=2)
 
-        # Tarjeta Operandos Dinámicos
         t_rinp = Tarjeta(col_l, titulo="Valores de los Operandos", subtitulo="Ingresa números romanos estándar (ej: X, XIV, MMXXIV)")
         t_rinp.pack(fill=tk.BOTH, expand=True)
 
@@ -1481,7 +1452,6 @@ class VentanaPrincipal:
             command=self.controlador.calcular_operacion_romanos, font=FONT_HEADING
         ).pack(fill=tk.X)
 
-        # Tarjeta Resultados Romanos
         t_rres = Tarjeta(col_r, titulo="Resultados de la Operación", subtitulo="Equivalencia en números romanos y arábigos con desglose")
         t_rres.pack(fill=tk.BOTH, expand=True)
 
@@ -1574,7 +1544,6 @@ class VentanaPrincipal:
     def _build_biseccion(self):
         parent = self.tab_biseccion
 
-        # Tarjeta Parámetros Bisección
         t_bcfg = Tarjeta(parent, titulo="Método de Bisección · Búsqueda de Raíces", subtitulo="Teorema del Valor Intermedio en funciones continuas")
         t_bcfg.pack(fill=tk.X, pady=(0, 8))
 
@@ -1610,7 +1579,6 @@ class VentanaPrincipal:
         BotonSecundario(actions, text="★ Ejemplo del Profesor", command=self.controlador.cargar_ejemplo_biseccion, font=FONT_SMALL_BOLD).pack(side=tk.LEFT, padx=6)
         tk.Label(actions, text="Funciones soportadas: sin, cos, tan, sqrt, log, exp, potencias (^)", font=FONT_MICRO, bg=BG_CARD, fg=TEXT_MUTED).pack(side=tk.RIGHT)
 
-        # Fila de Métricas / Resumen
         summary = tk.Frame(parent, bg=BG_WINDOW)
         summary.pack(fill=tk.X, pady=(0, 8))
 
@@ -1620,7 +1588,6 @@ class VentanaPrincipal:
         self.biseccion_continuidad = self._biseccion_metric(summary, "Continuidad [a, b]", "—", TEXT_MUTED)
         self.biseccion_estado = self._biseccion_metric(summary, "Estado", "Esperando datos", TEXT_MUTED)
 
-        # Gráfica y Explicación
         work = tk.Frame(parent, bg=BG_WINDOW)
         work.pack(fill=tk.BOTH, expand=True, pady=(0, 8))
 
@@ -1652,7 +1619,6 @@ class VentanaPrincipal:
         )
         self.biseccion_explicacion.pack(fill=tk.BOTH, expand=True)
 
-        # Tabla de Iteraciones
         t_tab = Tarjeta(parent, titulo="Tabla de Iteraciones", subtitulo="Historial completo de convergencia numérica")
         t_tab.pack(fill=tk.BOTH, expand=True)
 
@@ -1822,11 +1788,6 @@ class VentanaPrincipal:
         self._iteracion_seleccionada = fila
 
     def mostrar_demostracion_continuidad(self, resultado_cont):
-        """
-        Abre una ventana modal con la justificación matemática y demostración formal
-        de continuidad en el intervalo evaluado, explicando las 3 condiciones de cálculo
-        y la validez del Teorema de Bolzano.
-        """
         if resultado_cont is None:
             return
 
@@ -1838,7 +1799,6 @@ class VentanaPrincipal:
         modal.transient(self.root)
         modal.grab_set()
 
-        # Cabecera
         header = tk.Frame(modal, bg=BG_CARD, padx=20, pady=14, highlightthickness=1, highlightbackground=BORDER_SUBTLE)
         header.pack(fill=tk.X, padx=12, pady=(12, 8))
 
@@ -1853,7 +1813,6 @@ class VentanaPrincipal:
             font=FONT_SMALL, bg=BG_CARD, fg=TEXT_SECONDARY
         ).pack(anchor="w", pady=(2, 0))
 
-        # Tarjetas de datos rápidos y Badges
         info_frame = tk.Frame(modal, bg=BG_WINDOW)
         info_frame.pack(fill=tk.X, padx=12, pady=(0, 8))
 
@@ -1875,7 +1834,6 @@ class VentanaPrincipal:
         bolz_col = SUCCESS_TEXT if resultado_cont.aplica_bolzano else WARNING_TEXT
         tk.Label(c_st, text=bolz_txt, font=FONT_MICRO, bg=BG_CARD, fg=bolz_col).pack(anchor="w")
 
-        # Texto con scroll para el desarrollo matemático
         t_card = Tarjeta(modal, titulo="Fundamentación y Demostración Matemática", subtitulo="Comprobación formal de las 3 condiciones de Cauchy-Weierstrass")
         t_card.pack(fill=tk.BOTH, expand=True, padx=12, pady=(0, 10))
 
@@ -1913,7 +1871,6 @@ class VentanaPrincipal:
         txt_demo.insert("1.0", texto_completo)
         txt_demo.config(state="disabled")
 
-        # Barra inferior de acciones
         btn_bar = tk.Frame(modal, bg=BG_WINDOW)
         btn_bar.pack(fill=tk.X, padx=12, pady=(0, 12))
 
@@ -1934,9 +1891,6 @@ class VentanaPrincipal:
         self._ops()
 
     def _zoom_grafica_biseccion(self, event):
-        """
-        Aumenta o disminuye la escala de la gráfica de bisección con la rueda del ratón.
-        """
         if event.num == 4 or (hasattr(event, "delta") and event.delta > 0):
             factor = 1.2
         elif event.num == 5 or (hasattr(event, "delta") and event.delta < 0):
@@ -1951,7 +1905,6 @@ class VentanaPrincipal:
         return "break"
 
     def _reset_zoom_biseccion(self, _event=None):
-        """Restablece el factor de zoom de la gráfica de bisección a su valor predeterminado (1.0)."""
         self._zoom_biseccion = 1.0
         self._dibujar_grafica_biseccion()
         return "break"
@@ -2139,3 +2092,340 @@ class VentanaPrincipal:
         dlg.grab_set()
         self.root.wait_window(dlg)
         return resultado[0]
+
+    # ==========================================================================
+    # MÓDULO 6 — REGLA FALSA (REGULA FALSI)
+    # ==========================================================================
+    def _build_regula_falsi(self):
+        parent = self.tab_rf
+
+        t_cfg = Tarjeta(parent, titulo="Regla Falsa (Regula Falsi) · Búsqueda de Raíces", subtitulo="Inteligencia Geométrica mediante líneas rectas")
+        t_cfg.pack(fill=tk.X, pady=(0, 8))
+
+        fields = tk.Frame(t_cfg.contenido, bg=BG_CARD)
+        fields.pack(fill=tk.X, pady=(0, 6))
+
+        specs = (
+            ("Función f(x):", "rf_funcion", "x^4 - 5*x^3 + 0.5*x^2 - 11*x + 10", 32),
+            ("Extremo a:", "rf_a", "0.55", 9),
+            ("Extremo b:", "rf_b", "1.1", 9),
+            ("Error (%) :", "rf_error", "1", 8),
+            ("Máx. Iter:", "rf_max_iter", "100", 8),
+        )
+
+        for columna, (label, atributo, inicial, ancho) in enumerate(specs):
+            cell = tk.Frame(fields, bg=BG_CARD)
+            cell.grid(row=0, column=columna, sticky="ew", padx=(0, 10))
+            tk.Label(cell, text=label, font=FONT_SMALL_BOLD, bg=BG_CARD, fg=TEXT_PRIMARY).pack(anchor="w", pady=(0, 2))
+            if atributo == "rf_max_iter":
+                entry = SpinboxNumerico(cell, min_val=1, max_val=100000, initial_val=int(inicial), width=ancho)
+            else:
+                entry = CeldaMatriz(cell, valor_inicial=inicial, width=ancho)
+            entry.pack(fill=tk.X)
+            setattr(self, atributo, entry)
+            fields.grid_columnconfigure(columna, weight=3 if columna == 0 else 1)
+
+        actions = tk.Frame(t_cfg.contenido, bg=BG_CARD)
+        actions.pack(fill=tk.X, pady=(4, 0))
+
+        BotonPrimario(actions, text="⚡ CALCULAR RAÍZ", command=self.controlador.calcular_rf, font=FONT_SMALL_BOLD).pack(side=tk.LEFT, padx=(0, 6))
+        BotonSecundario(actions, text="🔬 Demostrar Continuidad", command=self.controlador.analizar_continuidad_rf, font=FONT_SMALL_BOLD).pack(side=tk.LEFT, padx=6)
+        BotonSecundario(actions, text="🧹 Limpiar", command=self.limpiar_rf, font=FONT_SMALL_BOLD).pack(side=tk.LEFT, padx=6)
+        BotonSecundario(actions, text="★ Ejemplo del Profesor", command=self.controlador.cargar_ejemplo_rf, font=FONT_SMALL_BOLD).pack(side=tk.LEFT, padx=6)
+        tk.Label(actions, text="Funciones soportadas: sin, cos, tan, sqrt, log, exp, potencias (^)", font=FONT_MICRO, bg=BG_CARD, fg=TEXT_MUTED).pack(side=tk.RIGHT)
+
+        summary = tk.Frame(parent, bg=BG_WINDOW)
+        summary.pack(fill=tk.X, pady=(0, 8))
+
+        self.rf_raiz = self._biseccion_metric(summary, "Raíz Aproximada", "—", ACCENT_PRIMARY)
+        self.rf_error_final = self._biseccion_metric(summary, "Error Relativo Final", "—", TEXT_PRIMARY)
+        self.rf_iteraciones_total = self._biseccion_metric(summary, "Iteraciones", "—", TEXT_PRIMARY)
+        self.rf_continuidad = self._biseccion_metric(summary, "Continuidad [a, b]", "—", TEXT_MUTED)
+        self.rf_estado = self._biseccion_metric(summary, "Estado", "Esperando datos", TEXT_MUTED)
+
+        work = tk.Frame(parent, bg=BG_WINDOW)
+        work.pack(fill=tk.BOTH, expand=True, pady=(0, 8))
+
+        t_graf = Tarjeta(work, titulo="Gráfica Interactiva", subtitulo="Comportamiento de f(x) y falsa posición · Rueda ratón zoom")
+        t_graf.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 6))
+
+        self.rf_canvas = tk.Canvas(t_graf.contenido, height=220, bg=BG_CARD, highlightthickness=0, bd=0)
+        self.rf_canvas.pack(fill=tk.BOTH, expand=True)
+        self.rf_canvas.bind("<Configure>", lambda _e: self._dibujar_grafica_rf())
+        self.rf_canvas.bind("<MouseWheel>", self._zoom_grafica_rf)
+        self.rf_canvas.bind("<Button-4>", self._zoom_grafica_rf)
+        self.rf_canvas.bind("<Button-5>", self._zoom_grafica_rf)
+        self.rf_canvas.bind("<Double-Button-1>", self._reset_zoom_rf)
+        self._funcion_grafica_rf = None
+        self._resultado_rf = None
+        self._iteracion_seleccionada_rf = None
+        self._zoom_rf = 1.0
+
+        t_exp = Tarjeta(work, titulo="Lectura del Procedimiento", subtitulo="Detalle paso a paso de Inteligencia Geométrica")
+        t_exp.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(6, 0))
+
+        self.rf_selector = ttk.Combobox(t_exp.contenido, state="readonly", width=24)
+        self.rf_selector.pack(anchor="w", pady=(0, 6))
+        self.rf_selector.bind("<<ComboboxSelected>>", self._seleccionar_iteracion_rf)
+
+        self.rf_explicacion = tk.Label(
+            t_exp.contenido, text="Carga una función e intervalo con cambio de signo para comenzar.",
+            font=FONT_MONO_SM, bg=BG_CARD, fg=TEXT_SECONDARY, justify=tk.LEFT, anchor="nw", wraplength=380
+        )
+        self.rf_explicacion.pack(fill=tk.BOTH, expand=True)
+
+        t_tab = Tarjeta(parent, titulo="Tabla de Iteraciones", subtitulo="Historial completo de convergencia numérica (Regula Falsi)")
+        t_tab.pack(fill=tk.BOTH, expand=True)
+
+        columns = ("i", "a", "b", "c", "fa", "fb", "fc", "signo", "abs_fc")
+        table_frame = tk.Frame(t_tab.contenido, bg=BG_CARD)
+        table_frame.pack(fill=tk.BOTH, expand=True)
+        table_frame.grid_rowconfigure(0, weight=1)
+        table_frame.grid_columnconfigure(0, weight=1)
+
+        self.rf_tabla = ttk.Treeview(table_frame, columns=columns, show="headings", height=7, selectmode="browse")
+        headings = {
+            "i": ("i", 45), "a": ("a (xl)", 100), "b": ("b (xu)", 100),
+            "c": ("xr (Falsa Posición)", 145), "fa": ("f(a)", 105),
+            "fb": ("f(b)", 105), "fc": ("f(xr)", 105),
+            "signo": ("f(a)·f(xr)", 95), "abs_fc": ("|f(xr)|", 100),
+        }
+        for columna, (titulo, ancho) in headings.items():
+            self.rf_tabla.heading(columna, text=titulo)
+            self.rf_tabla.column(columna, width=ancho, minwidth=ancho, anchor=tk.CENTER,
+                                 stretch=columna in ("a", "b", "c", "fa", "fb", "fc"))
+        self.rf_tabla.tag_configure("ultima", background=ACCENT_SOFT, foreground=ACCENT_PRIMARY)
+        self.rf_tabla.grid(row=0, column=0, sticky="nsew")
+
+        scroll_y = ttk.Scrollbar(table_frame, orient="vertical", command=self.rf_tabla.yview)
+        scroll_x = ttk.Scrollbar(table_frame, orient="horizontal", command=self.rf_tabla.xview)
+        self.rf_tabla.configure(yscrollcommand=scroll_y.set, xscrollcommand=scroll_x.set)
+        scroll_y.grid(row=0, column=1, sticky="ns")
+        scroll_x.grid(row=1, column=0, sticky="ew")
+
+        self.rf_tabla.bind("<<TreeviewSelect>>", self._seleccionar_fila_rf)
+        self._dibujar_grafica_rf()
+
+    def mostrar_resultado_rf(self, resultado, funcion):
+        self._resultado_rf = resultado
+        self._funcion_grafica_rf = funcion
+        self._zoom_rf = 1.0
+        self.rf_raiz.config(text=f"{resultado.raiz:.10g}")
+        self.rf_error_final.config(text="—" if resultado.error_final is None else f"{resultado.error_final:.6g} %")
+        self.rf_iteraciones_total.config(text=str(len(resultado.iteraciones)))
+        
+        if getattr(resultado, "continuidad", None):
+            cont = resultado.continuidad
+            self.rf_continuidad.config(text="Continua ✓" if cont.es_continua else "Discontinua ✗",
+                                       fg=SUCCESS_TEXT if cont.es_continua else ERROR_TEXT)
+        else:
+            self.rf_continuidad.config(text="—", fg=TEXT_MUTED)
+
+        self.rf_estado.config(text="CONVERGIÓ" if resultado.convergio else "LÍMITE ALCANZADO",
+                              fg=SUCCESS_TEXT if resultado.convergio else WARNING_TEXT)
+        
+        for item in self.rf_tabla.get_children(): self.rf_tabla.delete(item)
+        
+        for indice, fila in enumerate(resultado.iteraciones):
+            self.rf_tabla.insert("", tk.END, iid=str(indice), values=(
+                fila.numero, self._numero_biseccion(fila.a), self._numero_biseccion(fila.b),
+                self._numero_biseccion(fila.c), self._numero_biseccion(fila.fa),
+                self._numero_biseccion(fila.fb), self._numero_biseccion(fila.fc),
+                fila.signo_producto, self._numero_biseccion(abs(fila.fc)),
+            ), tags=("ultima",) if indice == len(resultado.iteraciones) - 1 else ())
+
+        opciones = []
+        if getattr(resultado, "continuidad", None): opciones.append("🔬 Demostración de Continuidad y Bolzano")
+        opciones.extend(f"Iteración {fila.numero}" for fila in resultado.iteraciones)
+        self.rf_selector["values"] = tuple(opciones)
+
+        if resultado.iteraciones:
+            indice_iter = len(resultado.iteraciones) - 1
+            idx_combo = (1 + indice_iter) if getattr(resultado, "continuidad", None) else indice_iter
+            self.rf_selector.current(idx_combo)
+            self._mostrar_iteracion_rf(indice_iter)
+            self.rf_tabla.selection_set(str(indice_iter))
+        else:
+            if getattr(resultado, "continuidad", None):
+                self.rf_selector.current(0)
+                self._mostrar_explicacion_continuidad_rf()
+            else:
+                self.rf_selector.set("")
+                self.rf_explicacion.config(text=resultado.motivo)
+        self._dibujar_grafica_rf()
+        self._ops()
+
+    def _mostrar_explicacion_continuidad_rf(self):
+        if not self._resultado_rf or not getattr(self._resultado_rf, "continuidad", None): return
+        cont = self._resultado_rf.continuidad
+        estado_c = "CONTINUA EN [a, b] ✓" if cont.es_continua else "DISCONTINUA ✗"
+        signo_c = "CAMBIO DE SIGNO f(a)·f(b) < 0 ✓" if cont.cambio_signo else "MISMO SIGNO EN EXTREMOS ✗"
+        bolzano_c = "TEOREMA DE BOLZANO: APLICABLE ✓" if cont.aplica_bolzano else "TEOREMA DE BOLZANO: NO APLICABLE"
+        texto = (
+            f"=== VERIFICACIÓN DE CONTINUIDAD Y BOLZANO ===\n\n"
+            f"• Función: f(x) = {cont.expresion_str}\n"
+            f"• Intervalo de análisis: [{cont.a:.10g}, {cont.b:.10g}]\n"
+            f"• Continuidad: {estado_c}\n• Condición de signos: {signo_c}\n• {bolzano_c}\n\n"
+            f"{cont.resumen}\n\nPresiona '🔬 Demostrar Continuidad' para abrir el informe formal."
+        )
+        self.rf_explicacion.config(text=texto)
+
+    def _seleccionar_iteracion_rf(self, _event=None):
+        val = self.rf_selector.get()
+        if not val or not self._resultado_rf: return
+        if "Demostración de Continuidad" in val:
+            self._mostrar_explicacion_continuidad_rf()
+            for item in self.rf_tabla.selection(): self.rf_tabla.selection_remove(item)
+            self._iteracion_seleccionada_rf = None
+            self._dibujar_grafica_rf()
+        else:
+            match = re.search(r"Iteración\s+(\d+)", val)
+            if match:
+                indice = int(match.group(1)) - 1
+                if 0 <= indice < len(self._resultado_rf.iteraciones):
+                    self._mostrar_iteracion_rf(indice)
+                    self.rf_tabla.selection_set(str(indice))
+                    self._dibujar_grafica_rf()
+
+    def _seleccionar_fila_rf(self, _event=None):
+        seleccion = self.rf_tabla.selection()
+        if seleccion and self._resultado_rf:
+            indice = int(seleccion[0])
+            offset = 1 if getattr(self._resultado_rf, "continuidad", None) else 0
+            if 0 <= indice + offset < len(self.rf_selector["values"]):
+                self.rf_selector.current(indice + offset)
+            self._mostrar_iteracion_rf(indice)
+            self._dibujar_grafica_rf()
+
+    def _mostrar_iteracion_rf(self, indice):
+        if not self._resultado_rf or not self._resultado_rf.iteraciones: return
+        fila = self._resultado_rf.iteraciones[indice]
+        error = "aún no se calcula (primera iteración)" if fila.error_relativo is None else f"{fila.error_relativo:.6g} %"
+        texto = (
+            f"Intervalo actual: xl = {fila.a:.10g}, xu = {fila.b:.10g}\n"
+            f"Falsa Posición: xr = xu - (f(xu)*(xl - xu))/(f(xl) - f(xu)) = {fila.c:.10g}\n"
+            f"f(xl) = {fila.fa:.8g}    f(xr) = {fila.fc:.8g}\n"
+            f"Signo de f(xl)·f(xr): {fila.signo_producto}\n"
+            f"Extremo que cambia: {fila.extremo_modificado}\n"
+            f"Nuevo intervalo: [{fila.nuevo_a:.10g}, {fila.nuevo_b:.10g}]\n"
+            f"Ea: {error}"
+        )
+        self.rf_explicacion.config(text=texto)
+        self._iteracion_seleccionada_rf = fila
+
+    def _zoom_grafica_rf(self, event):
+        if event.num == 4 or (hasattr(event, "delta") and event.delta > 0): factor = 1.2
+        elif event.num == 5 or (hasattr(event, "delta") and event.delta < 0): factor = 1.0 / 1.2
+        else: return "break"
+        nuevo_zoom = getattr(self, "_zoom_rf", 1.0) * factor
+        if 0.001 <= nuevo_zoom <= 1000.0:
+            self._zoom_rf = nuevo_zoom
+            self._dibujar_grafica_rf()
+        return "break"
+
+    def _reset_zoom_rf(self, _event=None):
+        self._zoom_rf = 1.0
+        self._dibujar_grafica_rf()
+        return "break"
+
+    def _dibujar_grafica_rf(self):
+        canvas = getattr(self, "rf_canvas", None)
+        if canvas is None: return
+        canvas.delete("all")
+        width, height = canvas.winfo_width(), canvas.winfo_height()
+        if width < 80 or height < 80: return
+        left, right, top, bottom = 54, width - 18, 18, height - 38
+        selected = self._iteracion_seleccionada_rf
+        
+        if selected: xmin, xmax = selected.a, selected.b
+        elif self._resultado_rf and self._resultado_rf.iteraciones:
+            first = self._resultado_rf.iteraciones[0]
+            xmin, xmax = first.a, first.b
+        else: xmin, xmax = -2.0, 2.0
+        
+        span = xmax - xmin or 1.0
+        zoom = getattr(self, "_zoom_rf", 1.0)
+        centro = (xmin + xmax) / 2.0
+        span_total = (span * 1.7) / zoom
+        xmin = centro - span_total / 2.0
+        xmax = centro + span_total / 2.0
+
+        function = self._funcion_grafica_rf
+        points = []
+        if function:
+            samples = 240
+            for index in range(samples + 1):
+                x = xmin + (xmax - xmin) * index / samples
+                try:
+                    y = function.evaluar(x)
+                    if abs(y) > 1e8: points.append(None)
+                    else: points.append((x, y))
+                except (ValueError, ZeroDivisionError, OverflowError): points.append(None)
+        
+        values = [p[1] for p in points if p is not None]
+        if selected: values.extend((selected.fa, selected.fc))
+        ymin, ymax = (min(values), max(values)) if values else (-1.0, 1.0)
+        if ymin == ymax: ymin, ymax = ymin - 1, ymax + 1
+        padding = (ymax - ymin) * 0.12
+        ymin, ymax = ymin - padding, ymax + padding
+        
+        to_x = lambda x: left + (x - xmin) / (xmax - xmin) * (right - left)
+        to_y = lambda y: bottom - (y - ymin) / (ymax - ymin) * (bottom - top)
+
+        for tick in range(5):
+            x = xmin + (xmax - xmin) * tick / 4
+            y = ymin + (ymax - ymin) * tick / 4
+            canvas.create_line(to_x(x), top, to_x(x), bottom, fill=BORDER_SUBTLE)
+            canvas.create_line(left, to_y(y), right, to_y(y), fill=BORDER_SUBTLE)
+            canvas.create_text(to_x(x), bottom + 15, text=f"{x:.4g}", fill=TEXT_MUTED, font=FONT_SMALL)
+            canvas.create_text(left - 8, to_y(y), text=f"{y:.4g}", fill=TEXT_MUTED, font=FONT_SMALL, anchor="e")
+            
+        if ymin <= 0 <= ymax: canvas.create_line(left, to_y(0), right, to_y(0), fill=TEXT_MUTED, width=1)
+        canvas.create_line(left, top, left, bottom, fill=TEXT_MUTED)
+        canvas.create_line(left, bottom, right, bottom, fill=TEXT_MUTED)
+
+        segment = []
+        for point in points + [None]:
+            if point is None:
+                if len(segment) > 1:
+                    coords = [c for x, y in segment for c in (to_x(x), to_y(y))]
+                    canvas.create_line(*coords, fill=ACCENT_PRIMARY, width=2, smooth=True)
+                segment = []
+            else: segment.append(point)
+            
+        canvas.create_text(right - 4, top + 8, text="f(x)", fill=ACCENT_PRIMARY, font=FONT_SMALL_BOLD, anchor="e")
+        if abs(zoom - 1.0) > 1e-4:
+            canvas.create_text(left + 6, top + 8, text=f"Escala: {zoom:.2g}x", fill=TEXT_MUTED, font=FONT_MICRO, anchor="w")
+
+        if selected:
+            try:
+                fa_y = function.evaluar(selected.a)
+                fb_y = function.evaluar(selected.b)
+                canvas.create_line(to_x(selected.a), to_y(fa_y), to_x(selected.b), to_y(fb_y), fill=WARNING_TEXT, dash=(4, 4), width=1.5)
+            except: pass
+
+            for x, label, color in ((selected.a, "xl", WARNING_TEXT), (selected.b, "xu", WARNING_TEXT), (selected.c, "xr", SUCCESS_TEXT)):
+                canvas.create_line(to_x(x), top, to_x(x), bottom, fill=color, dash=(3, 3))
+                try:
+                    y = function.evaluar(x)
+                    canvas.create_oval(to_x(x)-4, to_y(y)-4, to_x(x)+4, to_y(y)+4, fill=color, outline=BG_CARD, width=1)
+                except: pass
+                canvas.create_text(to_x(x), bottom + 27, text=label, fill=color, font=FONT_SMALL_BOLD)
+
+    def limpiar_rf(self):
+        for atributo in ("rf_funcion", "rf_a", "rf_b", "rf_error", "rf_max_iter"):
+            getattr(self, atributo).delete(0, tk.END)
+        self.rf_raiz.config(text="—")
+        self.rf_error_final.config(text="—")
+        self.rf_iteraciones_total.config(text="—")
+        self.rf_continuidad.config(text="—", fg=TEXT_MUTED)
+        self.rf_estado.config(text="Esperando datos", fg=TEXT_MUTED)
+        self._resultado_rf = None
+        self._funcion_grafica_rf = None
+        self._iteracion_seleccionada_rf = None
+        self._zoom_rf = 1.0
+        self.rf_selector["values"] = ()
+        self.rf_selector.set("")
+        for item in self.rf_tabla.get_children(): self.rf_tabla.delete(item)
+        self.rf_explicacion.config(text="Carga una función e intervalo para comenzar.")
+        self._dibujar_grafica_rf()
