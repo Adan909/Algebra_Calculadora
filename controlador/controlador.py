@@ -54,6 +54,14 @@ class Controlador:
             return
         self.vista.mostrar_resultado_biseccion(resultado, expresion)
 
+    def graficar_biseccion(self):
+        try:
+            funcion = FuncionMatematica(self.vista.biseccion_funcion.get())
+        except (ValueError, OverflowError) as error:
+            self.vista.mostrar_error("Función no válida", str(error))
+            return
+        self.vista.mostrar_grafica_biseccion(funcion)
+
     def analizar_continuidad(self):
         try:
             funcion_str = self.vista.biseccion_funcion.get().strip()
@@ -118,6 +126,15 @@ class Controlador:
             self.vista.mostrar_error("Error de Valor", str(e))
         except Exception as e:
             self.vista.mostrar_error("Error de Cálculo", f"Verifica la función y los intervalos: {str(e)}")
+
+    def graficar_rf(self):
+        try:
+            funcion = FuncionMatematica(self.vista.rf_funcion.get())
+        except (ValueError, OverflowError) as error:
+            self.vista.mostrar_error("Función no válida", str(error))
+            return
+        self.vista.mostrar_grafica_rf(funcion)
+
     def analizar_continuidad_rf(self):
         try:
             # 1. Leer los campos de la pestaña de Regula Falsi
@@ -736,5 +753,4 @@ class Controlador:
             self.vista.mostrar_resultados_romanos(resultado)
         else:
             self.vista.mostrar_error("Error en Expresión", resultado['error'])
-
 

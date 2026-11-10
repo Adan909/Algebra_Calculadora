@@ -443,6 +443,10 @@ class VentanaPrincipal:
                     self.mostrar_resultado_biseccion(estado["bis_res"], estado["bis_func_obj"])
                     self._zoom_biseccion = estado.get("bis_zoom", 1.0)
                     self._dibujar_grafica_biseccion()
+                elif estado.get("bis_func_obj"):
+                    self.mostrar_grafica_biseccion(estado["bis_func_obj"])
+                    self._zoom_biseccion = estado.get("bis_zoom", 1.0)
+                    self._dibujar_grafica_biseccion()
                     
             # Restaurar Regla Falsa
             if hasattr(self, "rf_funcion"):
@@ -458,6 +462,10 @@ class VentanaPrincipal:
                 self.rf_max_iter.insert(0, estado.get("rf_max", ""))
                 if estado.get("rf_res") and estado.get("rf_func_obj"):
                     self.mostrar_resultado_rf(estado["rf_res"], estado["rf_func_obj"])
+                elif estado.get("rf_func_obj"):
+                    self.mostrar_grafica_rf(estado["rf_func_obj"])
+                    self._zoom_rf = estado.get("rf_zoom", 1.0)
+                    self._dibujar_grafica_rf()
                     self._zoom_rf = estado.get("rf_zoom", 1.0)
                     self._dibujar_grafica_rf()
 
@@ -1574,6 +1582,7 @@ class VentanaPrincipal:
         actions.pack(fill=tk.X, pady=(4, 0))
 
         BotonPrimario(actions, text="⚡ CALCULAR RAÍZ", command=self.controlador.calcular_biseccion, font=FONT_SMALL_BOLD).pack(side=tk.LEFT, padx=(0, 6))
+        BotonSecundario(actions, text="📈 Graficar Función", command=self.controlador.graficar_biseccion, font=FONT_SMALL_BOLD).pack(side=tk.LEFT, padx=6)
         BotonSecundario(actions, text="🔬 Demostrar Continuidad", command=self.controlador.analizar_continuidad, font=FONT_SMALL_BOLD).pack(side=tk.LEFT, padx=6)
         BotonSecundario(actions, text="🧹 Limpiar", command=self.controlador.limpiar_biseccion, font=FONT_SMALL_BOLD).pack(side=tk.LEFT, padx=6)
         BotonSecundario(actions, text="★ Ejemplo del Profesor", command=self.controlador.cargar_ejemplo_biseccion, font=FONT_SMALL_BOLD).pack(side=tk.LEFT, padx=6)
@@ -1604,6 +1613,7 @@ class VentanaPrincipal:
         self._funcion_grafica_biseccion = None
         self._resultado_biseccion = None
         self._iteracion_seleccionada = None
+        self._rango_grafica_biseccion = None
         self._zoom_biseccion = 1.0
 
         t_exp = Tarjeta(work, titulo="Lectura del Procedimiento", subtitulo="Detalle paso a paso del intervalo")
@@ -1666,6 +1676,7 @@ class VentanaPrincipal:
     def mostrar_resultado_biseccion(self, resultado, funcion):
         self._resultado_biseccion = resultado
         self._funcion_grafica_biseccion = funcion
+        self._rango_grafica_biseccion = None
         self._zoom_biseccion = 1.0
         self.biseccion_raiz.config(text=f"{resultado.raiz:.10g}")
         self.biseccion_error_final.config(
@@ -1716,6 +1727,13 @@ class VentanaPrincipal:
                 self.biseccion_explicacion.config(text=resultado.motivo)
         self._dibujar_grafica_biseccion()
         self._ops()
+
+    def mostrar_grafica_biseccion(self, funcion):
+        self._funcion_grafica_biseccion = funcion
+        self._rango_grafica_biseccion = (-2.0, 2.0)
+        self._iteracion_seleccionada = None
+        self._zoom_biseccion = 1.0
+        self._dibujar_grafica_biseccion()
 
     def _mostrar_explicacion_continuidad(self):
         if not self._resultado_biseccion or not getattr(self._resultado_biseccion, "continuidad", None):
@@ -1919,7 +1937,11 @@ class VentanaPrincipal:
             return
         left, right, top, bottom = 54, width - 18, 18, height - 38
         selected = self._iteracion_seleccionada
-        if selected:
+        graph_range = self._rango_grafica_biseccion
+        if graph_range is not None:
+            xmin, xmax = graph_range
+            selected = None
+        elif selected:
             xmin, xmax = selected.a, selected.b
         elif self._resultado_biseccion and self._resultado_biseccion.iteraciones:
             first = self._resultado_biseccion.iteraciones[0]
@@ -2008,6 +2030,7 @@ class VentanaPrincipal:
         self._resultado_biseccion = None
         self._funcion_grafica_biseccion = None
         self._iteracion_seleccionada = None
+        self._rango_grafica_biseccion = None
         self._zoom_biseccion = 1.0
         self.biseccion_selector["values"] = ()
         self.biseccion_selector.set("")
@@ -2129,6 +2152,7 @@ class VentanaPrincipal:
         actions.pack(fill=tk.X, pady=(4, 0))
 
         BotonPrimario(actions, text="⚡ CALCULAR RAÍZ", command=self.controlador.calcular_rf, font=FONT_SMALL_BOLD).pack(side=tk.LEFT, padx=(0, 6))
+        BotonSecundario(actions, text="📈 Graficar Función", command=self.controlador.graficar_rf, font=FONT_SMALL_BOLD).pack(side=tk.LEFT, padx=6)
         BotonSecundario(actions, text="🔬 Demostrar Continuidad", command=self.controlador.analizar_continuidad_rf, font=FONT_SMALL_BOLD).pack(side=tk.LEFT, padx=6)
         BotonSecundario(actions, text="🧹 Limpiar", command=self.limpiar_rf, font=FONT_SMALL_BOLD).pack(side=tk.LEFT, padx=6)
         BotonSecundario(actions, text="★ Ejemplo del Profesor", command=self.controlador.cargar_ejemplo_rf, font=FONT_SMALL_BOLD).pack(side=tk.LEFT, padx=6)
@@ -2159,6 +2183,7 @@ class VentanaPrincipal:
         self._funcion_grafica_rf = None
         self._resultado_rf = None
         self._iteracion_seleccionada_rf = None
+        self._rango_grafica_rf = None
         self._zoom_rf = 1.0
 
         t_exp = Tarjeta(work, titulo="Lectura del Procedimiento", subtitulo="Detalle paso a paso de Inteligencia Geométrica")
@@ -2209,6 +2234,7 @@ class VentanaPrincipal:
     def mostrar_resultado_rf(self, resultado, funcion):
         self._resultado_rf = resultado
         self._funcion_grafica_rf = funcion
+        self._rango_grafica_rf = None
         self._zoom_rf = 1.0
         self.rf_raiz.config(text=f"{resultado.raiz:.10g}")
         self.rf_error_final.config(text="—" if resultado.error_final is None else f"{resultado.error_final:.6g} %")
@@ -2254,6 +2280,13 @@ class VentanaPrincipal:
                 self.rf_explicacion.config(text=resultado.motivo)
         self._dibujar_grafica_rf()
         self._ops()
+
+    def mostrar_grafica_rf(self, funcion):
+        self._funcion_grafica_rf = funcion
+        self._rango_grafica_rf = (-2.0, 2.0)
+        self._iteracion_seleccionada_rf = None
+        self._zoom_rf = 1.0
+        self._dibujar_grafica_rf()
 
     def _mostrar_explicacion_continuidad_rf(self):
         if not self._resultado_rf or not getattr(self._resultado_rf, "continuidad", None): return
@@ -2337,7 +2370,11 @@ class VentanaPrincipal:
         left, right, top, bottom = 54, width - 18, 18, height - 38
         selected = self._iteracion_seleccionada_rf
         
-        if selected: xmin, xmax = selected.a, selected.b
+        graph_range = self._rango_grafica_rf
+        if graph_range is not None:
+            xmin, xmax = graph_range
+            selected = None
+        elif selected: xmin, xmax = selected.a, selected.b
         elif self._resultado_rf and self._resultado_rf.iteraciones:
             first = self._resultado_rf.iteraciones[0]
             xmin, xmax = first.a, first.b
@@ -2423,6 +2460,7 @@ class VentanaPrincipal:
         self._resultado_rf = None
         self._funcion_grafica_rf = None
         self._iteracion_seleccionada_rf = None
+        self._rango_grafica_rf = None
         self._zoom_rf = 1.0
         self.rf_selector["values"] = ()
         self.rf_selector.set("")
