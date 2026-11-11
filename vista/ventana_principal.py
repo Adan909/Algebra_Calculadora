@@ -1356,7 +1356,7 @@ class VentanaPrincipal:
         row_mej = tk.Frame(t_mcfg.contenido, bg=BG_CARD)
         row_mej.pack(fill=tk.X)
         tk.Label(row_mej, text="Presets:", font=FONT_MICRO, bg=BG_CARD, fg=TEXT_MUTED).pack(side=tk.LEFT, padx=(0, 6))
-        for lbl, tipo in [("Inv 2×2", "inv_2x2"), ("Inv 3×3", "inv_3x3"), ("Singular", "inv_singular"), ("LU 3×3", "lu_3x3"), ("LU Pivot", "lu_pivoteo")]:
+        for lbl, tipo in [("Inv 2×2", "inv_2x2"), ("Inv 3×3", "inv_3x3"), ("Inv det=1", "inv_det_uno"), ("LU 3×3", "lu_3x3"), ("LU Pivot", "lu_pivoteo")]:
             BotonFantasma(row_mej, text=lbl, command=lambda t=tipo: self.controlador.cargar_ejemplo_matrices(t)).pack(side=tk.LEFT, padx=2)
 
         t_minp = Tarjeta(m_izq, titulo="Matrices A y B", subtitulo="Ingresa los coeficientes numéricos")
@@ -1478,7 +1478,8 @@ class VentanaPrincipal:
             for j in range(n_b):
                 celda = CeldaMatriz(c, valor_inicial="0", width=6)
                 celda.grid(row=i+1, column=j+off+1, padx=2, pady=2)
-                self.mat_entries_b.append(fila)
+                fila.append(celda)
+            self.mat_entries_b.append(fila)
             tk.Label(c, text="]", font=FONT_MONO_LG, bg=BG_CARD, fg=TEXT_SECONDARY).grid(row=i+1, column=n_b+off+1)
         self.scroll_matrices_ops.observar_contenido()
 
@@ -1634,17 +1635,39 @@ class VentanaPrincipal:
         nb_r.add(self.tab_res_normales, text="  Sistema Arábigo  ")
         nb_r.add(self.tab_res_desglose, text="  Procedimiento Detallado  ")
 
-        self.lbl_res_romano = tk.Label(
-            self.tab_res_romanos, text="—", font=("Consolas", 24, "bold"),
-            bg=BG_CARD, fg=ACCENT_PRIMARY, anchor="nw", justify=tk.LEFT,
-        )
-        self.lbl_res_romano.pack(anchor="nw", fill=tk.X)
+        def crear_resultado_desplazable(parent, foreground):
+            canvas = tk.Canvas(
+                parent, bg=BG_CARD, height=48, highlightthickness=0,
+            )
+            scrollbar = ttk.Scrollbar(
+                parent, orient="horizontal", command=canvas.xview,
+            )
+            canvas.configure(xscrollcommand=scrollbar.set)
+            label = tk.Label(
+                canvas, text="—", font=("Consolas", 24, "bold"),
+                bg=BG_CARD, fg=foreground, anchor="nw", justify=tk.LEFT,
+            )
+            canvas.create_window((0, 0), window=label, anchor="nw")
+            label.bind(
+                "<Configure>",
+                lambda _event, area=canvas: area.configure(
+                    scrollregion=area.bbox("all")
+                ),
+            )
+            canvas.pack(fill=tk.X)
+            scrollbar.pack(fill=tk.X)
+            return label, canvas, scrollbar
 
-        self.lbl_res_normal = tk.Label(
-            self.tab_res_normales, text="—", font=("Consolas", 24, "bold"),
-            bg=BG_CARD, fg=TEXT_PRIMARY, anchor="nw", justify=tk.LEFT,
-        )
-        self.lbl_res_normal.pack(anchor="nw", fill=tk.X)
+        (
+            self.lbl_res_romano,
+            self.canvas_res_romano,
+            self.scroll_res_romano,
+        ) = crear_resultado_desplazable(self.tab_res_romanos, ACCENT_PRIMARY)
+        (
+            self.lbl_res_normal,
+            self.canvas_res_normal,
+            self.scroll_res_normal,
+        ) = crear_resultado_desplazable(self.tab_res_normales, TEXT_PRIMARY)
 
         frame_txt_rom = tk.Frame(self.tab_res_desglose, bg=BG_CARD)
         frame_txt_rom.pack(fill=tk.X)
@@ -1706,6 +1729,8 @@ class VentanaPrincipal:
 
         self.lbl_res_romano.config(text=ec_romano)
         self.lbl_res_normal.config(text=ec_normal)
+        self.canvas_res_romano.xview_moveto(0)
+        self.canvas_res_normal.xview_moveto(0)
         self._write(self.txt_rom_desglose, desglose)
         self._ops()
 

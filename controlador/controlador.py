@@ -274,8 +274,8 @@ class Controlador:
         elif tipo == "inv_3x3":
             A = [[1, 2, 3], [0, 1, 4], [5, 6, 0]]
             B = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
-        elif tipo == "inv_singular":
-            A = [[1, 2], [2, 4]]
+        elif tipo == "inv_det_uno":
+            A = [[3, 1], [2, 1]]
             B = [[1, 0], [0, 1]]
         elif tipo == "lu_3x3":
             A = [[2, 1, 1], [4, 3, 3], [8, 7, 9]]
@@ -697,7 +697,8 @@ class Controlador:
         try:
             decimal, proceso = base_a_decimal(cadena, base_num)
             texto = f"--- Conversión de {base_nombre} a Decimal ---\n"
-            texto += f"Número original: {cadena}\n\n{proceso}"
+            texto += f"Número original: {cadena}\n\n{proceso}\n"
+            texto += f"Número en base decimal: {decimal}"
             self.vista.mostrar_resultado_conversion(texto)
         except ValueError as e:
             self.vista.mostrar_error("Error de conversión", str(e))
@@ -718,7 +719,8 @@ class Controlador:
             texto = f"--- Conversión de Decimal a {base_nombre} ---\n"
             texto += f"Número Decimal: {decimal}\n\n"
             texto += "Algoritmo de divisiones sucesivas:\n"
-            texto += proceso
+            texto += f"{proceso}\n"
+            texto += f"Número en base {base_nombre.lower()}: {res}"
             self.vista.mostrar_resultado_conversion(texto)
         except Exception as e:
             self.vista.mostrar_error("Error", str(e))

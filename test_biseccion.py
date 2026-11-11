@@ -121,6 +121,8 @@ class PruebasBiseccion(unittest.TestCase):
             vista = Controlador(root).vista
             self.assertEqual(vista.lbl_res_romano.cget("anchor"), "nw")
             self.assertEqual(vista.lbl_res_romano.cget("justify"), "left")
+            self.assertEqual(str(vista.scroll_res_romano.cget("orient")), "horizontal")
+            self.assertEqual(str(vista.scroll_res_normal.cget("orient")), "horizontal")
         finally:
             for callback in root.tk.call("after", "info"):
                 root.after_cancel(callback)
