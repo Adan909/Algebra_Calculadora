@@ -158,6 +158,60 @@ class PruebasNewtonRaphson(unittest.TestCase):
                 root.after_cancel(callback)
             root.destroy()
 
+    def test_demostracion_continuidad_analiza_funcion_y_derivada(self):
+        import tkinter as tk
+        from unittest.mock import patch
+
+        from controlador.controlador import Controlador
+
+        root = tk.Tk()
+        root.withdraw()
+        try:
+            app = Controlador(root)
+            vista = app.vista
+            with patch.object(vista, "mostrar_demostracion_continuidad") as mostrar:
+                app.analizar_continuidad_newton_raphson()
+
+            primitiva, = mostrar.call_args.args
+            derivada = mostrar.call_args.kwargs["resultado_derivada"]
+            self.assertTrue(primitiva.es_continua)
+            self.assertTrue(derivada.es_continua)
+            self.assertEqual((primitiva.a, primitiva.b), (derivada.a, derivada.b))
+            self.assertAlmostEqual(
+                FuncionMatematica(
+                    mostrar.call_args.kwargs["expresion_derivada"]
+                ).evaluar(1.5),
+                3,
+            )
+            vista.mostrar_demostracion_continuidad(
+                primitiva,
+                resultado_derivada=derivada,
+                expresion_derivada=mostrar.call_args.kwargs["expresion_derivada"],
+            )
+            root.update_idletasks()
+            modal = next(
+                child for child in root.winfo_children()
+                if isinstance(child, tk.Toplevel)
+            )
+
+            def recorrer(widget):
+                yield widget
+                for hijo in widget.winfo_children():
+                    yield from recorrer(hijo)
+
+            texto = next(
+                widget for widget in recorrer(modal)
+                if isinstance(widget, tk.Text)
+            )
+            self.assertIn(
+                "ANÁLISIS DE CONTINUIDAD DE LA DERIVADA",
+                texto.get("1.0", tk.END),
+            )
+        finally:
+            for callback in root.tk.call("after", "info"):
+                root.after_cancel(callback)
+            root.destroy()
+
 
 if __name__ == "__main__":
     unittest.main()

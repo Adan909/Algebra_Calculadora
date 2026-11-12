@@ -342,6 +342,9 @@ class VentanaPrincipal:
             estado["secante_max"] = self.secante_max_iter.get() if hasattr(self, "secante_max_iter") else ""
             estado["secante_res"] = getattr(self, "_resultado_secante", None)
             estado["secante_func_obj"] = getattr(self, "_funcion_grafica_secante", None)
+            estado["secante_zoom"] = getattr(self, "_zoom_secante", 1.0)
+            estado["secante_pan_x"] = getattr(self, "_desplazamiento_x_secante", 0.0)
+            estado["secante_pan_y"] = getattr(self, "_desplazamiento_y_secante", 0.0)
         except Exception:
             pass
         return estado
@@ -558,6 +561,10 @@ class VentanaPrincipal:
                     )
                 elif estado.get("secante_func_obj"):
                     self.mostrar_grafica_secante(estado["secante_func_obj"])
+                self._zoom_secante = estado.get("secante_zoom", 1.0)
+                self._desplazamiento_x_secante = estado.get("secante_pan_x", 0.0)
+                self._desplazamiento_y_secante = estado.get("secante_pan_y", 0.0)
+                self._dibujar_grafica_secante()
 
             # Seleccionar pestaña principal
             tab_idx = estado.get("tab_idx", 0)
@@ -2137,7 +2144,9 @@ class VentanaPrincipal:
         self.biseccion_explicacion.config(text=texto)
         self._iteracion_seleccionada = fila
 
-    def mostrar_demostracion_continuidad(self, resultado_cont):
+    def mostrar_demostracion_continuidad(
+        self, resultado_cont, resultado_derivada=None, expresion_derivada=None,
+    ):
         if resultado_cont is None:
             return
 
@@ -2159,7 +2168,13 @@ class VentanaPrincipal:
 
         tk.Label(
             header,
-            text=f"Análisis riguroso en [{resultado_cont.a:g}, {resultado_cont.b:g}] según el Teorema del Valor Intermedio (Bolzano)",
+            text=(
+                f"Análisis de f(x) y f′(x) en [{resultado_cont.a:g}, "
+                f"{resultado_cont.b:g}]"
+                if resultado_derivada else
+                f"Análisis riguroso en [{resultado_cont.a:g}, "
+                f"{resultado_cont.b:g}] según el Teorema del Valor Intermedio (Bolzano)"
+            ),
             font=FONT_SMALL, bg=BG_CARD, fg=TEXT_SECONDARY
         ).pack(anchor="w", pady=(2, 0))
 
@@ -2170,14 +2185,30 @@ class VentanaPrincipal:
         c_fn.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 4))
         tk.Label(c_fn, text="Función Evaluada", font=FONT_MICRO, bg=BG_CARD, fg=TEXT_MUTED).pack(anchor="w")
         tk.Label(c_fn, text=f"f(x) = {resultado_cont.expresion_str}", font=FONT_BODY_BOLD, bg=BG_CARD, fg=ACCENT_PRIMARY).pack(anchor="w")
+        if resultado_derivada and expresion_derivada:
+            tk.Label(
+                c_fn, text=f"f′(x) = {expresion_derivada}",
+                font=FONT_BODY_BOLD, bg=BG_CARD, fg=ACCENT_PRIMARY,
+            ).pack(anchor="w")
         tk.Label(c_fn, text=f"Tipo: {resultado_cont.tipo_funcion}", font=FONT_MICRO, bg=BG_CARD, fg=TEXT_SECONDARY).pack(anchor="w")
 
         c_st = tk.Frame(info_frame, bg=BG_CARD, padx=12, pady=8, highlightthickness=1, highlightbackground=BORDER_SUBTLE)
         c_st.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(4, 0))
         tk.Label(c_st, text="Estado de Continuidad & Bolzano", font=FONT_MICRO, bg=BG_CARD, fg=TEXT_MUTED).pack(anchor="w")
         
-        estado_txt = "CONTINUA EN EL INTERVALO" if resultado_cont.es_continua else "DISCONTINUA"
-        estado_col = SUCCESS_TEXT if resultado_cont.es_continua else ERROR_TEXT
+        if resultado_derivada:
+            estado_txt = (
+                f"f(x): {'CONTINUA' if resultado_cont.es_continua else 'DISCONTINUA'}\n"
+                f"f′(x): {'CONTINUA' if resultado_derivada.es_continua else 'DISCONTINUA'}"
+            )
+            estado_col = (
+                SUCCESS_TEXT
+                if resultado_cont.es_continua and resultado_derivada.es_continua
+                else ERROR_TEXT
+            )
+        else:
+            estado_txt = "CONTINUA EN EL INTERVALO" if resultado_cont.es_continua else "DISCONTINUA"
+            estado_col = SUCCESS_TEXT if resultado_cont.es_continua else ERROR_TEXT
         tk.Label(c_st, text=estado_txt, font=FONT_BODY_BOLD, bg=BG_CARD, fg=estado_col).pack(anchor="w")
         
         bolz_txt = "Bolzano Válido (Raíz asegurada)" if resultado_cont.aplica_bolzano else "Bolzano No Aplicable"
@@ -2216,9 +2247,40 @@ class VentanaPrincipal:
             resultado_cont.teorema_bolzano,
             "=" * 60
         ]
+        if resultado_derivada:
+            bloques.extend([
+                "",
+                "=" * 60,
+                "ANÁLISIS DE CONTINUIDAD DE LA DERIVADA",
+                f"Derivada analítica: f′(x) = {expresion_derivada}",
+                resultado_derivada.demostracion_formal,
+                "\n" + "=" * 60,
+                "DETALLE DE LAS 3 CONDICIONES PARA f′(x):",
+                "-" * 60,
+                "Condición 1 (Pertenencia al Dominio / Evaluación de f′(c)):",
+                resultado_derivada.condicion_1_evaluacion,
+                "",
+                "Condición 2 (Existencia y Finitud de Límites Laterales):",
+                resultado_derivada.condicion_2_limites,
+                "",
+                "Condición 3 (Igualdad del Límite y el Valor de la Función):",
+                resultado_derivada.condicion_3_coincidencia,
+                "\n" + "=" * 60,
+            ])
         texto_completo = "\n".join(bloques)
 
         txt_demo.insert("1.0", texto_completo)
+        txt_demo.tag_configure(
+            "condicion_fallida", foreground=ERROR_TEXT, font=FONT_MONO_BOLD,
+        )
+        for numero, linea in enumerate(texto_completo.splitlines(), start=1):
+            if any(
+                marca in linea
+                for marca in ("NO CUMPLIDA", "Falló", "NO ES CONTINUA")
+            ):
+                txt_demo.tag_add(
+                    "condicion_fallida", f"{numero}.0", f"{numero}.end",
+                )
         txt_demo.config(state="disabled")
 
         btn_bar = tk.Frame(modal, bg=BG_WINDOW)
@@ -3123,6 +3185,11 @@ class VentanaPrincipal:
             font=FONT_SMALL_BOLD,
         ).pack(side=tk.LEFT, padx=6)
         BotonSecundario(
+            actions, text="🔬 Demostrar Continuidad",
+            command=self.controlador.analizar_continuidad_newton_raphson,
+            font=FONT_SMALL_BOLD,
+        ).pack(side=tk.LEFT, padx=6)
+        BotonSecundario(
             actions, text="🧹 Limpiar",
             command=self.limpiar_newton_raphson,
             font=FONT_SMALL_BOLD,
@@ -3273,6 +3340,8 @@ class VentanaPrincipal:
             "<<TreeviewSelect>>", self._seleccionar_fila_newton_raphson,
         )
         self._resultado_newton_raphson = None
+        self._funcion_resultado_newton = None
+        self._parametros_resultado_newton = None
         self._dibujar_grafica_newton()
 
     def _build_secante(self):
@@ -3365,7 +3434,7 @@ class VentanaPrincipal:
         work.pack(fill=tk.BOTH, expand=True, pady=(0, 8))
         grafica = Tarjeta(
             work, titulo="Gráfica Interactiva",
-            subtitulo="Función y aproximaciones de la secante",
+            subtitulo="Arrastra para recorrer el plano · Rueda para zoom · Doble clic para restablecer",
         )
         grafica.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 6))
         self.secante_canvas = tk.Canvas(
@@ -3376,9 +3445,28 @@ class VentanaPrincipal:
         self.secante_canvas.bind(
             "<Configure>", lambda _event: self._dibujar_grafica_secante(),
         )
+        self.secante_canvas.bind("<MouseWheel>", self._zoom_grafica_secante)
+        self.secante_canvas.bind("<Button-4>", self._zoom_grafica_secante)
+        self.secante_canvas.bind("<Button-5>", self._zoom_grafica_secante)
+        self.secante_canvas.bind(
+            "<ButtonPress-1>", self._iniciar_pan_grafica_secante,
+        )
+        self.secante_canvas.bind("<B1-Motion>", self._mover_grafica_secante)
+        self.secante_canvas.bind(
+            "<ButtonRelease-1>", self._terminar_pan_grafica_secante,
+        )
+        self.secante_canvas.bind(
+            "<Double-Button-1>", self._reset_zoom_secante,
+        )
         self._funcion_grafica_secante = None
         self._resultado_secante = None
         self._iteracion_seleccionada_secante = None
+        self._zoom_secante = 1.0
+        self._desplazamiento_x_secante = 0.0
+        self._desplazamiento_y_secante = 0.0
+        self._escala_x_pan_secante = 1.0
+        self._escala_y_pan_secante = 1.0
+        self._inicio_pan_secante = None
 
         detalle = Tarjeta(
             work, titulo="Lectura del Procedimiento",
@@ -3457,6 +3545,9 @@ class VentanaPrincipal:
         self._resultado_secante = resultado
         self._funcion_grafica_secante = funcion
         self._iteracion_seleccionada_secante = None
+        self._zoom_secante = 1.0
+        self._desplazamiento_x_secante = 0.0
+        self._desplazamiento_y_secante = 0.0
         self.secante_raiz.config(text=f"{resultado.raiz:.10g}")
         self.secante_error_final.config(
             text="—" if resultado.error_final is None
@@ -3501,7 +3592,55 @@ class VentanaPrincipal:
 
     def mostrar_grafica_secante(self, funcion):
         self._funcion_grafica_secante = funcion
+        self._zoom_secante = 1.0
+        self._desplazamiento_x_secante = 0.0
+        self._desplazamiento_y_secante = 0.0
         self._dibujar_grafica_secante()
+
+    def _zoom_grafica_secante(self, event):
+        if event.num == 4 or (hasattr(event, "delta") and event.delta > 0):
+            factor = 1.2
+        elif event.num == 5 or (hasattr(event, "delta") and event.delta < 0):
+            factor = 1.0 / 1.2
+        else:
+            return "break"
+        nuevo_zoom = self._zoom_secante * factor
+        if 0.001 <= nuevo_zoom <= 1000.0:
+            self._zoom_secante = nuevo_zoom
+            self._dibujar_grafica_secante()
+        return "break"
+
+    def _iniciar_pan_grafica_secante(self, event):
+        self._inicio_pan_secante = (
+            event.x, event.y, self._desplazamiento_x_secante,
+            self._desplazamiento_y_secante,
+        )
+        self.secante_canvas.configure(cursor="fleur")
+
+    def _mover_grafica_secante(self, event):
+        if self._inicio_pan_secante is None:
+            return
+        x_inicio, y_inicio, pan_x, pan_y = self._inicio_pan_secante
+        ancho = max(1, self.secante_canvas.winfo_width() - 72)
+        alto = max(1, self.secante_canvas.winfo_height() - 56)
+        self._desplazamiento_x_secante = (
+            pan_x - (event.x - x_inicio) * self._escala_x_pan_secante / ancho
+        )
+        self._desplazamiento_y_secante = (
+            pan_y + (event.y - y_inicio) * self._escala_y_pan_secante / alto
+        )
+        self._dibujar_grafica_secante()
+
+    def _terminar_pan_grafica_secante(self, _event=None):
+        self._inicio_pan_secante = None
+        self.secante_canvas.configure(cursor="")
+
+    def _reset_zoom_secante(self, _event=None):
+        self._zoom_secante = 1.0
+        self._desplazamiento_x_secante = 0.0
+        self._desplazamiento_y_secante = 0.0
+        self._dibujar_grafica_secante()
+        return "break"
 
     def _dibujar_grafica_secante(self):
         canvas = getattr(self, "secante_canvas", None)
@@ -3536,8 +3675,11 @@ class VentanaPrincipal:
                 xmin, xmax, marcas = -2.0, 2.0, ()
         if xmin == xmax:
             xmin, xmax = xmin - 1, xmax + 1
-        margen_x = (xmax - xmin) * 0.35
-        xmin, xmax = xmin - margen_x, xmax + margen_x
+        centro_x = (xmin + xmax) / 2.0
+        rango_x = (xmax - xmin) * 1.7 / self._zoom_secante
+        xmin = centro_x - rango_x / 2.0 + self._desplazamiento_x_secante
+        xmax = centro_x + rango_x / 2.0 + self._desplazamiento_x_secante
+        self._escala_x_pan_secante = xmax - xmin
         puntos = []
         funcion = self._funcion_grafica_secante
         if funcion:
@@ -3552,6 +3694,11 @@ class VentanaPrincipal:
         valores_y = [punto[1] for punto in puntos if punto is not None]
         valores_y.append(0.0)
         ymin, ymax = self._limites_verticales_grafica(valores_y)
+        centro_y = (ymin + ymax) / 2.0
+        rango_y = (ymax - ymin) * 1.7 / self._zoom_secante
+        ymin = centro_y - rango_y / 2.0 - self._desplazamiento_y_secante
+        ymax = centro_y + rango_y / 2.0 - self._desplazamiento_y_secante
+        self._escala_y_pan_secante = ymax - ymin
         to_x = lambda x: left + (x - xmin) / (xmax - xmin) * (right - left)
         to_y = lambda y: bottom - (y - ymin) / (ymax - ymin) * (bottom - top)
         for tick in range(5):
@@ -3602,6 +3749,9 @@ class VentanaPrincipal:
         if match and self._resultado_secante:
             indice = int(match.group(1)) - 1
             if 0 <= indice < len(self._resultado_secante.iteraciones):
+                self._zoom_secante = 1.0
+                self._desplazamiento_x_secante = 0.0
+                self._desplazamiento_y_secante = 0.0
                 self.secante_tabla.selection_set(str(indice))
                 self.secante_tabla.see(str(indice))
                 self._mostrar_iteracion_secante(indice)
@@ -3611,6 +3761,9 @@ class VentanaPrincipal:
         seleccion = self.secante_tabla.selection()
         if seleccion and self._resultado_secante:
             indice = int(seleccion[0])
+            self._zoom_secante = 1.0
+            self._desplazamiento_x_secante = 0.0
+            self._desplazamiento_y_secante = 0.0
             self.secante_selector.current(indice)
             self._mostrar_iteracion_secante(indice)
             self._dibujar_grafica_secante()
@@ -3656,6 +3809,10 @@ class VentanaPrincipal:
         self._resultado_secante = None
         self._funcion_grafica_secante = None
         self._iteracion_seleccionada_secante = None
+        self._zoom_secante = 1.0
+        self._desplazamiento_x_secante = 0.0
+        self._desplazamiento_y_secante = 0.0
+        self._inicio_pan_secante = None
         self.secante_selector["values"] = ()
         self.secante_selector.set("")
         for item in self.secante_tabla.get_children():
@@ -3939,6 +4096,14 @@ class VentanaPrincipal:
 
     def mostrar_resultado_newton_raphson(self, resultado, funcion):
         self._resultado_newton_raphson = resultado
+        self._funcion_resultado_newton = funcion
+        self._parametros_resultado_newton = tuple(
+            entrada.get().strip()
+            for entrada in (
+                self.newton_funcion, self.newton_x_inicial,
+                self.newton_error, self.newton_max_iter,
+            )
+        )
         self._funcion_grafica_newton = funcion
         self._rango_grafica_newton = None
         self._desplazamiento_x_newton = 0.0
@@ -4066,6 +4231,8 @@ class VentanaPrincipal:
         self.newton_raiz_anterior.config(state=tk.DISABLED)
         self.newton_raiz_siguiente.config(state=tk.DISABLED)
         self._resultado_newton_raphson = None
+        self._funcion_resultado_newton = None
+        self._parametros_resultado_newton = None
         self._funcion_grafica_newton = None
         self._iteracion_seleccionada_newton = None
         self._rango_grafica_newton = None

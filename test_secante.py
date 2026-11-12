@@ -53,16 +53,19 @@ class PruebasSecante(unittest.TestCase):
 
     def test_integracion_con_pestana_y_tabla(self):
         import tkinter as tk
+        from types import SimpleNamespace
 
         from controlador.controlador import Controlador
 
         root = tk.Tk()
-        root.withdraw()
+        root.geometry("1280x880")
         try:
             app = Controlador(root)
             vista = app.vista
+            root.update()
             vista.nb_main.select(vista.tab_secante)
             app.calcular_secante()
+            root.update()
 
             self.assertTrue(vista._resultado_secante.convergio)
             self.assertEqual(
@@ -71,6 +74,17 @@ class PruebasSecante(unittest.TestCase):
             )
             self.assertIn("xₙ₊₁ =", vista.secante_explicacion.cget("text"))
             self.assertEqual(vista.nb_main.index("current"), len(vista.modulos) - 1)
+            self.assertTrue(vista.secante_canvas.bind("<MouseWheel>"))
+            self.assertTrue(vista.secante_canvas.find_withtag("function_trace"))
+            vista._zoom_grafica_secante(SimpleNamespace(num=0, delta=120))
+            self.assertEqual(vista._zoom_secante, 1.2)
+            self.assertTrue(vista.secante_canvas.find_withtag("function_trace"))
+            vista._inicio_pan_secante = (0, 0, 0, 0)
+            vista._mover_grafica_secante(SimpleNamespace(x=10, y=10))
+            self.assertNotEqual(vista._desplazamiento_x_secante, 0)
+            vista._reset_zoom_secante()
+            self.assertEqual(vista._zoom_secante, 1)
+            self.assertEqual(vista._desplazamiento_x_secante, 0)
         finally:
             for callback in root.tk.call("after", "info"):
                 root.after_cancel(callback)

@@ -305,6 +305,44 @@ class PruebasBiseccion(unittest.TestCase):
         self.assertFalse(analisis.cambio_signo)
         self.assertFalse(analisis.aplica_bolzano)
 
+    def test_condiciones_no_cumplidas_se_muestran_en_rojo(self):
+        import tkinter as tk
+
+        from controlador.controlador import Controlador
+        from vista.tema import ERROR_TEXT
+
+        root = tk.Tk()
+        root.withdraw()
+        try:
+            vista = Controlador(root).vista
+            analisis = verificar_continuidad("1/x", -1, 1)
+            vista.mostrar_demostracion_continuidad(analisis)
+            root.update_idletasks()
+
+            modal = next(
+                child for child in root.winfo_children()
+                if isinstance(child, tk.Toplevel)
+            )
+
+            def recorrer(widget):
+                yield widget
+                for hijo in widget.winfo_children():
+                    yield from recorrer(hijo)
+
+            texto = next(
+                widget for widget in recorrer(modal)
+                if isinstance(widget, tk.Text)
+            )
+            rangos = texto.tag_ranges("condicion_fallida")
+            self.assertTrue(rangos)
+            self.assertEqual(
+                texto.tag_cget("condicion_fallida", "foreground"), ERROR_TEXT,
+            )
+        finally:
+            for callback in root.tk.call("after", "info"):
+                root.after_cancel(callback)
+            root.destroy()
+
     # Usa entradas textuales como las que obtiene el controlador desde los campos Tkinter.
     def test_otra_funcion(self):
         resultado = biseccion("x^2 - 2", "1", "2", "0.01", "100")

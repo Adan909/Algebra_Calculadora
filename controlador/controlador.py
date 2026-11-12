@@ -5,7 +5,7 @@ from vista.ventana_principal import VentanaPrincipal
 from modelo.solucionador import SolucionadorGauss, SolucionadorGaussJordan, SolucionadorLU
 from modelo.biseccion import FuncionMatematica, biseccion, verificar_continuidad, ResultadoContinuidad
 from modelo.regula_falsi import calcular_regula_falsi
-from modelo.newton_raphson import newton_raphson
+from modelo.newton_raphson import derivar, newton_raphson
 from modelo.secante import secante
 # Importar funciones de modelo
 from modelo.matriz import formatear_fraccion, formatear_matriz
@@ -213,6 +213,48 @@ class Controlador:
             entrada.delete(0, "end")
             entrada.insert(0, valor)
         self.calcular_newton_raphson()
+
+    def analizar_continuidad_newton_raphson(self):
+        try:
+            funcion = FuncionMatematica(self.vista.newton_funcion.get())
+            x_inicial = float(Fraction(self.vista.newton_x_inicial.get().strip()))
+            if not math.isfinite(x_inicial):
+                raise ValueError("El valor inicial x₀ debe ser un número real finito.")
+
+            derivada = derivar(funcion)
+            funcion_derivada = FuncionMatematica(derivada.expresion)
+            resultado_previo = getattr(self.vista, "_resultado_newton_raphson", None)
+            funcion_previa = getattr(self.vista, "_funcion_resultado_newton", None)
+            parametros_actuales = tuple(
+                entrada.get().strip()
+                for entrada in (
+                    self.vista.newton_funcion, self.vista.newton_x_inicial,
+                    self.vista.newton_error, self.vista.newton_max_iter,
+                )
+            )
+            puntos = [x_inicial]
+            if (resultado_previo and resultado_previo.iteraciones and funcion_previa
+                    and funcion_previa.expresion == funcion.expresion
+                    and self.vista._parametros_resultado_newton == parametros_actuales
+                    and resultado_previo.iteraciones[0].x == x_inicial):
+                puntos.extend(
+                    fila.siguiente_x for fila in resultado_previo.iteraciones
+                )
+            a, b = min(puntos), max(puntos)
+            if a == b:
+                radio = max(abs(x_inicial) * 0.01, 1e-3)
+                a, b = x_inicial - radio, x_inicial + radio
+
+            continuidad_funcion = funcion.analizar_continuidad(a, b)
+            continuidad_derivada = funcion_derivada.analizar_continuidad(a, b)
+        except (ValueError, OverflowError) as error:
+            self.vista.mostrar_error("Error de Continuidad", str(error))
+            return
+        self.vista.mostrar_demostracion_continuidad(
+            continuidad_funcion,
+            resultado_derivada=continuidad_derivada,
+            expresion_derivada=derivada.expresion,
+        )
 
     def calcular_secante(self):
         try:
