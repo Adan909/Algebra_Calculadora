@@ -345,16 +345,16 @@ class PruebasBiseccion(unittest.TestCase):
     def test_trigonometricas_y_logaritmos(self):
         from modelo.regula_falsi import calcular_regula_falsi
 
-        # 1. Logaritmo natural con ln(x) y log(x)
+        # 1. Logaritmo natural con ln(x) y base 10 con log(x)
         f_ln = FuncionMatematica("ln(x) - 1")
         res_rf_ln = calcular_regula_falsi(f_ln, 2.0, 3.0, 0.001, 100)
         self.assertTrue(res_rf_ln.convergio)
         self.assertAlmostEqual(res_rf_ln.raiz, 2.71828, places=3)
 
         f_log = FuncionMatematica("log(x) - 1")
-        res_rf_log = calcular_regula_falsi(f_log, 2.0, 3.0, 0.001, 100)
+        res_rf_log = calcular_regula_falsi(f_log, 9.0, 11.0, 0.001, 100)
         self.assertTrue(res_rf_log.convergio)
-        self.assertAlmostEqual(res_rf_log.raiz, 2.71828, places=3)
+        self.assertAlmostEqual(res_rf_log.raiz, 10, places=3)
 
         # 2. Funciones trigonométricas con sin/sen, cos, tan/tg
         f_sen = FuncionMatematica("sen(x)")

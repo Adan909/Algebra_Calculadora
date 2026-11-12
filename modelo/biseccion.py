@@ -42,7 +42,7 @@ class FuncionMatematica:
         "exp": math.exp,
         "floor": math.floor,
         "ln": math.log,
-        "log": math.log,
+        "log": math.log10,
         "log10": math.log10,
         "sen": math.sin,
         "sin": math.sin,

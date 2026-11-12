@@ -27,7 +27,8 @@ class PruebasNewtonRaphson(unittest.TestCase):
             ("cos(x)", 0, 0),
             ("tan(x)", 0, 1),
             ("exp(x)", 0, 1),
-            ("log(x)", 2, 0.5),
+            ("ln(x)", 2, 0.5),
+            ("log(x)", 2, 1 / (2 * math.log(10))),
             ("log10(x)", 2, 1 / (2 * math.log(10))),
             ("sqrt(x)", 4, 0.25),
             ("asin(x)", 0, 1),
@@ -43,6 +44,14 @@ class PruebasNewtonRaphson(unittest.TestCase):
                 self.assertAlmostEqual(
                     derivar(FuncionMatematica(expresion)).evaluar(x), esperado
                 )
+
+    def test_newton_distingue_logaritmo_natural_y_base_diez(self):
+        casos = (("ln(x) - 1", "2.5", math.e), ("log(x) - 1", "9.5", 10))
+        for expresion, inicial, raiz_esperada in casos:
+            with self.subTest(expresion=expresion):
+                resultado = newton_raphson(expresion, inicial, "1e-8", "20")
+                self.assertTrue(resultado.convergio)
+                self.assertAlmostEqual(resultado.raiz, raiz_esperada, places=7)
 
     def test_raiz_exacta_en_el_valor_inicial(self):
         resultado = newton_raphson("x - 2", "2", "0.01", "10")

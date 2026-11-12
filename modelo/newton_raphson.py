@@ -139,7 +139,7 @@ def _derivar(nodo):
                 _suma(
                     _producto(
                         derivada_derecha,
-                        _llamada("log", copy.deepcopy(nodo.left)),
+                        _llamada("ln", copy.deepcopy(nodo.left)),
                     ),
                     _binario(
                         ast.Div,
@@ -177,9 +177,9 @@ def _derivar(nodo):
             )
         elif nombre == "exp":
             factor = _llamada("exp", argumento)
-        elif nombre == "log":
+        elif nombre == "ln":
             factor = _binario(ast.Div, _constante(1), argumento)
-        elif nombre == "log10":
+        elif nombre in {"log", "log10"}:
             factor = _binario(
                 ast.Div,
                 _constante(1 / math.log(10)),

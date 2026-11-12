@@ -192,6 +192,7 @@ class VentanaPrincipal:
             "Método de Bisección",
             "Regla Falsa",
             "Newton-Raphson",
+            "Método de la Secante",
         ]
         right_box = tk.Frame(header_bar, bg=BG_CARD)
         right_box.pack(side=tk.RIGHT, fill=tk.Y, padx=(10, 18))
@@ -332,6 +333,15 @@ class VentanaPrincipal:
             estado["newton_root_idx"] = getattr(self, "_raiz_actual_newton", None)
             estado["newton_pan_x"] = getattr(self, "_desplazamiento_x_newton", 0.0)
             estado["newton_pan_y"] = getattr(self, "_desplazamiento_y_newton", 0.0)
+
+            # Secante
+            estado["secante_func"] = self.secante_funcion.get() if hasattr(self, "secante_funcion") else ""
+            estado["secante_x_anterior"] = self.secante_x_anterior.get() if hasattr(self, "secante_x_anterior") else ""
+            estado["secante_x_actual"] = self.secante_x_actual.get() if hasattr(self, "secante_x_actual") else ""
+            estado["secante_err"] = self.secante_error.get() if hasattr(self, "secante_error") else ""
+            estado["secante_max"] = self.secante_max_iter.get() if hasattr(self, "secante_max_iter") else ""
+            estado["secante_res"] = getattr(self, "_resultado_secante", None)
+            estado["secante_func_obj"] = getattr(self, "_funcion_grafica_secante", None)
         except Exception:
             pass
         return estado
@@ -530,6 +540,25 @@ class VentanaPrincipal:
                 self._desplazamiento_y_newton = estado.get("newton_pan_y", 0.0)
                 self._dibujar_grafica_newton()
 
+            # Restaurar Secante
+            if hasattr(self, "secante_funcion"):
+                self.secante_funcion.delete(0, tk.END)
+                self.secante_funcion.insert(0, estado.get("secante_func", ""))
+                self.secante_x_anterior.delete(0, tk.END)
+                self.secante_x_anterior.insert(0, estado.get("secante_x_anterior", ""))
+                self.secante_x_actual.delete(0, tk.END)
+                self.secante_x_actual.insert(0, estado.get("secante_x_actual", ""))
+                self.secante_error.delete(0, tk.END)
+                self.secante_error.insert(0, estado.get("secante_err", ""))
+                self.secante_max_iter.delete(0, tk.END)
+                self.secante_max_iter.insert(0, estado.get("secante_max", ""))
+                if estado.get("secante_res") and estado.get("secante_func_obj"):
+                    self.mostrar_resultado_secante(
+                        estado["secante_res"], estado["secante_func_obj"],
+                    )
+                elif estado.get("secante_func_obj"):
+                    self.mostrar_grafica_secante(estado["secante_func_obj"])
+
             # Seleccionar pestaña principal
             tab_idx = estado.get("tab_idx", 0)
             if hasattr(self, "nav_segmentada"):
@@ -598,6 +627,7 @@ class VentanaPrincipal:
         self.tab_biseccion = tk.Frame(self.nb_main, bg=BG_WINDOW)
         self.tab_rf        = tk.Frame(self.nb_main, bg=BG_WINDOW)
         self.tab_newton    = tk.Frame(self.nb_main, bg=BG_WINDOW)
+        self.tab_secante   = tk.Frame(self.nb_main, bg=BG_WINDOW)
 
         self.nb_main.add(self.tab_gauss,     text="Gauss-Jordan")
         self.nb_main.add(self.tab_vectorial, text="Vectorial & Matrices")
@@ -606,6 +636,7 @@ class VentanaPrincipal:
         self.nb_main.add(self.tab_biseccion, text="Método de Bisección")
         self.nb_main.add(self.tab_rf,        text="Regla Falsa")
         self.nb_main.add(self.tab_newton,    text="Newton-Raphson")
+        self.nb_main.add(self.tab_secante,   text="Método de la Secante")
 
         self._build_gauss()
         self._build_vectorial()
@@ -614,6 +645,7 @@ class VentanaPrincipal:
         self._build_biseccion()
         self._build_regula_falsi()
         self._build_newton_raphson()
+        self._build_secante()
 
     # ==========================================================================
     # HELPERS Y CONSOLA DE PANTALLA COMPLETA
@@ -3242,6 +3274,396 @@ class VentanaPrincipal:
         )
         self._resultado_newton_raphson = None
         self._dibujar_grafica_newton()
+
+    def _build_secante(self):
+        parent = self.tab_secante
+        tarjeta = Tarjeta(
+            parent,
+            titulo="Método de la Secante · Búsqueda de Raíces",
+            subtitulo="Iteración: xₙ₊₁ = xₙ − f(xₙ)(xₙ − xₙ₋₁) / (f(xₙ) − f(xₙ₋₁))",
+        )
+        tarjeta.pack(fill=tk.X, pady=(0, 8))
+
+        fields = tk.Frame(tarjeta.contenido, bg=BG_CARD)
+        fields.pack(fill=tk.X, pady=(0, 6))
+        specs = (
+            ("Función f(x):", "secante_funcion", "x^2 - 2", 32),
+            ("X anterior (x₀):", "secante_x_anterior", "1", 12),
+            ("X actual (x₁):", "secante_x_actual", "2", 12),
+            ("Error (%) :", "secante_error", "0.0001", 10),
+            ("Máx. Iter:", "secante_max_iter", "20", 8),
+        )
+        for columna, (label, atributo, inicial, ancho) in enumerate(specs):
+            cell = tk.Frame(fields, bg=BG_CARD)
+            cell.grid(row=0, column=columna, sticky="ew", padx=(0, 10))
+            tk.Label(
+                cell, text=label, font=FONT_SMALL_BOLD,
+                bg=BG_CARD, fg=TEXT_PRIMARY,
+            ).pack(anchor="w", pady=(0, 2))
+            if atributo == "secante_max_iter":
+                entry = SpinboxNumerico(
+                    cell, min_val=1, max_val=100000,
+                    initial_val=int(inicial), width=ancho,
+                )
+            else:
+                entry = CeldaMatriz(cell, valor_inicial=inicial, width=ancho)
+            entry.pack(fill=tk.X)
+            setattr(self, atributo, entry)
+            fields.grid_columnconfigure(columna, weight=3 if columna == 0 else 1)
+
+        actions = tk.Frame(tarjeta.contenido, bg=BG_CARD)
+        actions.pack(fill=tk.X, pady=(4, 0))
+        BotonPrimario(
+            actions, text="⚡ CALCULAR RAÍZ",
+            command=self.controlador.calcular_secante,
+            font=FONT_SMALL_BOLD,
+        ).pack(side=tk.LEFT, padx=(0, 6))
+        BotonSecundario(
+            actions, text="📈 Graficar Función",
+            command=self.controlador.graficar_secante,
+            font=FONT_SMALL_BOLD,
+        ).pack(side=tk.LEFT, padx=6)
+        BotonSecundario(
+            actions, text="🔬 Demostrar Continuidad",
+            command=self.controlador.analizar_continuidad_secante,
+            font=FONT_SMALL_BOLD,
+        ).pack(side=tk.LEFT, padx=6)
+        BotonSecundario(
+            actions, text="🧹 Limpiar", command=self.controlador.limpiar_secante,
+            font=FONT_SMALL_BOLD,
+        ).pack(side=tk.LEFT, padx=6)
+        BotonSecundario(
+            actions, text="★ Ejemplo del Profesor",
+            command=self.controlador.cargar_ejemplo_secante,
+            font=FONT_SMALL_BOLD,
+        ).pack(side=tk.LEFT, padx=6)
+        tk.Label(
+            actions,
+            text="Usa dos aproximaciones iniciales; no requiere cambio de signo",
+            font=FONT_MICRO, bg=BG_CARD, fg=TEXT_MUTED,
+        ).pack(side=tk.RIGHT)
+
+        summary = tk.Frame(parent, bg=BG_WINDOW)
+        summary.pack(fill=tk.X, pady=(0, 8))
+        self.secante_raiz = self._biseccion_metric(
+            summary, "Raíz Aproximada", "—", ACCENT_PRIMARY,
+        )
+        self.secante_error_final = self._biseccion_metric(
+            summary, "Error Relativo Final", "—", TEXT_PRIMARY,
+        )
+        self.secante_iteraciones_total = self._biseccion_metric(
+            summary, "Iteraciones", "—", TEXT_PRIMARY,
+        )
+        self.secante_continuidad = self._biseccion_metric(
+            summary, "Continuidad [x₀, x₁]", "Pendiente", TEXT_MUTED,
+        )
+        self.secante_estado = self._biseccion_metric(
+            summary, "Estado", "Esperando datos", TEXT_MUTED,
+        )
+
+        work = tk.Frame(parent, bg=BG_WINDOW)
+        work.pack(fill=tk.BOTH, expand=True, pady=(0, 8))
+        grafica = Tarjeta(
+            work, titulo="Gráfica Interactiva",
+            subtitulo="Función y aproximaciones de la secante",
+        )
+        grafica.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 6))
+        self.secante_canvas = tk.Canvas(
+            grafica.contenido, height=220, bg=BG_CARD,
+            highlightthickness=0, bd=0,
+        )
+        self.secante_canvas.pack(fill=tk.BOTH, expand=True)
+        self.secante_canvas.bind(
+            "<Configure>", lambda _event: self._dibujar_grafica_secante(),
+        )
+        self._funcion_grafica_secante = None
+        self._resultado_secante = None
+        self._iteracion_seleccionada_secante = None
+
+        detalle = Tarjeta(
+            work, titulo="Lectura del Procedimiento",
+            subtitulo="Selecciona una fila para consultar cada sustitución",
+        )
+        detalle.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(6, 0))
+        self.secante_selector = ttk.Combobox(
+            detalle.contenido, state="readonly", width=24,
+        )
+        self.secante_selector.pack(anchor="w", pady=(0, 6))
+        self.secante_selector.bind(
+            "<<ComboboxSelected>>", self._seleccionar_iteracion_secante,
+        )
+        self.secante_explicacion = tk.Label(
+            detalle.contenido,
+            text="Ingresa una función y dos valores iniciales para comenzar.",
+            font=(FONT_MONO[0], FONT_MONO[1] + 1), bg=BG_CARD, fg=TEXT_PRIMARY,
+            justify=tk.LEFT, anchor="nw", wraplength=560,
+        )
+        self.secante_explicacion.pack(fill=tk.BOTH, expand=True)
+
+        tabla_tarjeta = Tarjeta(
+            parent, titulo="Tabla de Iteraciones",
+            subtitulo="Valores de x anterior, x actual y cada aproximación",
+        )
+        tabla_tarjeta.pack(fill=tk.BOTH, expand=True)
+        frame_tabla = tk.Frame(tabla_tarjeta.contenido, bg=BG_CARD)
+        frame_tabla.pack(fill=tk.BOTH, expand=True)
+        frame_tabla.grid_rowconfigure(0, weight=1)
+        frame_tabla.grid_columnconfigure(0, weight=1)
+        columnas = (
+            "i", "x_anterior", "x_actual", "aproximacion", "fx_anterior",
+            "fx_actual", "f_aproximacion", "error",
+        )
+        self.secante_tabla = ttk.Treeview(
+            frame_tabla, columns=columnas, show="headings",
+            height=7, selectmode="browse",
+        )
+        encabezados = {
+            "i": ("i", 45),
+            "x_anterior": ("x anterior", 105),
+            "x_actual": ("x actual", 105),
+            "aproximacion": ("Aproximación xₙ₊₁", 135),
+            "fx_anterior": ("f(x anterior)", 110),
+            "fx_actual": ("f(x actual)", 110),
+            "f_aproximacion": ("f(xₙ₊₁)", 110),
+            "error": ("Ea (%)", 100),
+        }
+        for columna, (titulo, ancho) in encabezados.items():
+            self.secante_tabla.heading(columna, text=titulo)
+            self.secante_tabla.column(
+                columna, width=ancho, minwidth=ancho, anchor=tk.CENTER,
+                stretch=columna != "i",
+            )
+        self.secante_tabla.tag_configure(
+            "ultima", background=ACCENT_SOFT, foreground=ACCENT_PRIMARY,
+        )
+        self.secante_tabla.grid(row=0, column=0, sticky="nsew")
+        scroll_y = ttk.Scrollbar(
+            frame_tabla, orient="vertical", command=self.secante_tabla.yview,
+        )
+        scroll_x = ttk.Scrollbar(
+            frame_tabla, orient="horizontal", command=self.secante_tabla.xview,
+        )
+        self.secante_tabla.configure(
+            yscrollcommand=scroll_y.set, xscrollcommand=scroll_x.set,
+        )
+        scroll_y.grid(row=0, column=1, sticky="ns")
+        scroll_x.grid(row=1, column=0, sticky="ew")
+        self.secante_tabla.bind(
+            "<<TreeviewSelect>>", self._seleccionar_fila_secante,
+        )
+        self._dibujar_grafica_secante()
+
+    def mostrar_resultado_secante(self, resultado, funcion):
+        self._resultado_secante = resultado
+        self._funcion_grafica_secante = funcion
+        self._iteracion_seleccionada_secante = None
+        self.secante_raiz.config(text=f"{resultado.raiz:.10g}")
+        self.secante_error_final.config(
+            text="—" if resultado.error_final is None
+            else f"{resultado.error_final:.6g} %",
+        )
+        self.secante_iteraciones_total.config(text=str(len(resultado.iteraciones)))
+        self.secante_estado.config(
+            text="CONVERGIÓ" if resultado.convergio else "LÍMITE ALCANZADO",
+            fg=SUCCESS_TEXT if resultado.convergio else WARNING_TEXT,
+        )
+        for item in self.secante_tabla.get_children():
+            self.secante_tabla.delete(item)
+        for indice, fila in enumerate(resultado.iteraciones):
+            self.secante_tabla.insert(
+                "", tk.END, iid=str(indice),
+                values=(
+                    fila.numero,
+                    self._numero_biseccion(fila.x_anterior),
+                    self._numero_biseccion(fila.x_actual),
+                    self._numero_biseccion(fila.aproximacion),
+                    self._numero_biseccion(fila.fx_anterior),
+                    self._numero_biseccion(fila.fx_actual),
+                    self._numero_biseccion(fila.f_aproximacion),
+                    self._numero_biseccion(fila.error_relativo),
+                ),
+                tags=("ultima",) if indice == len(resultado.iteraciones) - 1 else (),
+            )
+        self.secante_selector["values"] = tuple(
+            f"Iteración {fila.numero}" for fila in resultado.iteraciones
+        )
+        if resultado.iteraciones:
+            indice = len(resultado.iteraciones) - 1
+            self.secante_selector.current(indice)
+            self.secante_tabla.selection_set(str(indice))
+            self.secante_tabla.see(str(indice))
+            self._mostrar_iteracion_secante(indice)
+        else:
+            self.secante_selector.set("")
+            self.secante_explicacion.config(text=resultado.motivo)
+        self._dibujar_grafica_secante()
+        self._ops()
+
+    def mostrar_grafica_secante(self, funcion):
+        self._funcion_grafica_secante = funcion
+        self._dibujar_grafica_secante()
+
+    def _dibujar_grafica_secante(self):
+        canvas = getattr(self, "secante_canvas", None)
+        if canvas is None:
+            return
+        canvas.delete("all")
+        width, height = canvas.winfo_width(), canvas.winfo_height()
+        if width < 80 or height < 80:
+            return
+        left, right, top, bottom = 54, width - 18, 18, height - 38
+        fila = self._iteracion_seleccionada_secante
+        if fila is None and self._resultado_secante and self._resultado_secante.iteraciones:
+            fila = self._resultado_secante.iteraciones[-1]
+        if fila:
+            marcas = (
+                (fila.x_anterior, "x anterior", WARNING_TEXT),
+                (fila.x_actual, "x actual", WARNING_TEXT),
+                (fila.aproximacion, "xₙ₊₁", SUCCESS_TEXT),
+            )
+            xmin = min(item[0] for item in marcas)
+            xmax = max(item[0] for item in marcas)
+        else:
+            try:
+                x_anterior = float(Fraction(self.secante_x_anterior.get().strip()))
+                x_actual = float(Fraction(self.secante_x_actual.get().strip()))
+                xmin, xmax = sorted((x_anterior, x_actual))
+                marcas = (
+                    (x_anterior, "x anterior", WARNING_TEXT),
+                    (x_actual, "x actual", WARNING_TEXT),
+                )
+            except (ValueError, ZeroDivisionError, OverflowError):
+                xmin, xmax, marcas = -2.0, 2.0, ()
+        if xmin == xmax:
+            xmin, xmax = xmin - 1, xmax + 1
+        margen_x = (xmax - xmin) * 0.35
+        xmin, xmax = xmin - margen_x, xmax + margen_x
+        puntos = []
+        funcion = self._funcion_grafica_secante
+        if funcion:
+            muestras = max(240, (right - left) * 2)
+            for indice in range(muestras + 1):
+                x = xmin + (xmax - xmin) * indice / muestras
+                try:
+                    y = funcion.evaluar(x)
+                    puntos.append((x, y) if self._es_valor_grafica_valido(y) else None)
+                except (ValueError, ZeroDivisionError, OverflowError):
+                    puntos.append(None)
+        valores_y = [punto[1] for punto in puntos if punto is not None]
+        valores_y.append(0.0)
+        ymin, ymax = self._limites_verticales_grafica(valores_y)
+        to_x = lambda x: left + (x - xmin) / (xmax - xmin) * (right - left)
+        to_y = lambda y: bottom - (y - ymin) / (ymax - ymin) * (bottom - top)
+        for tick in range(5):
+            x = xmin + (xmax - xmin) * tick / 4
+            y = ymin + (ymax - ymin) * tick / 4
+            canvas.create_line(to_x(x), top, to_x(x), bottom, fill=BORDER_SUBTLE)
+            canvas.create_line(left, to_y(y), right, to_y(y), fill=BORDER_SUBTLE)
+            canvas.create_text(
+                to_x(x), bottom + 15, text=f"{x:.4g}",
+                fill=TEXT_MUTED, font=FONT_SMALL,
+            )
+            canvas.create_text(
+                left - 8, to_y(y), text=f"{y:.4g}",
+                fill=TEXT_MUTED, font=FONT_SMALL, anchor="e",
+            )
+        for segmento in self._segmentos_visibles_grafica(puntos, ymin, ymax):
+            coordenadas = [
+                coordenada for x, y in segmento for coordenada in (to_x(x), to_y(y))
+            ]
+            canvas.create_line(
+                *coordenadas, fill=ACCENT_PRIMARY, width=2,
+                tags=("function_trace",),
+            )
+        canvas.create_rectangle(left, top, right, bottom, outline=TEXT_MUTED)
+        if ymin <= 0 <= ymax:
+            canvas.create_line(left, to_y(0), right, to_y(0), fill=TEXT_MUTED)
+        for x, etiqueta, color in marcas:
+            if xmin <= x <= xmax:
+                canvas.create_line(
+                    to_x(x), top, to_x(x), bottom, fill=color, dash=(3, 3),
+                )
+                try:
+                    y = funcion.evaluar(x)
+                    canvas.create_oval(
+                        to_x(x) - 4, to_y(y) - 4, to_x(x) + 4, to_y(y) + 4,
+                        fill=color, outline=BG_CARD,
+                    )
+                except (AttributeError, ValueError, ZeroDivisionError, OverflowError):
+                    pass
+                canvas.create_text(
+                    to_x(x), bottom + 27, text=etiqueta,
+                    fill=color, font=FONT_SMALL_BOLD,
+                )
+
+    def _seleccionar_iteracion_secante(self, _event=None):
+        seleccion = self.secante_selector.get()
+        match = re.search(r"Iteración\s+(\d+)", seleccion)
+        if match and self._resultado_secante:
+            indice = int(match.group(1)) - 1
+            if 0 <= indice < len(self._resultado_secante.iteraciones):
+                self.secante_tabla.selection_set(str(indice))
+                self.secante_tabla.see(str(indice))
+                self._mostrar_iteracion_secante(indice)
+                self._dibujar_grafica_secante()
+
+    def _seleccionar_fila_secante(self, _event=None):
+        seleccion = self.secante_tabla.selection()
+        if seleccion and self._resultado_secante:
+            indice = int(seleccion[0])
+            self.secante_selector.current(indice)
+            self._mostrar_iteracion_secante(indice)
+            self._dibujar_grafica_secante()
+
+    def _mostrar_iteracion_secante(self, indice):
+        if not self._resultado_secante or not self._resultado_secante.iteraciones:
+            return
+        fila = self._resultado_secante.iteraciones[indice]
+        criterio = (
+            "Se usa un error relativo alternativo porque xₙ₊₁ = 0."
+            if "alternativo" in fila.criterio_error
+            else "Error relativo porcentual entre aproximaciones consecutivas."
+        )
+        texto = (
+            "Método de la Secante:\n"
+            f"Iteración {fila.numero}\n"
+            f"xₙ₋₁ = {fila.x_anterior:.10g}    f(xₙ₋₁) = {fila.fx_anterior:.10g}\n"
+            f"xₙ = {fila.x_actual:.10g}    f(xₙ) = {fila.fx_actual:.10g}\n"
+            "Fórmula de iteración:\n"
+            "xₙ₊₁ = xₙ − f(xₙ)(xₙ − xₙ₋₁) / (f(xₙ) − f(xₙ₋₁))\n"
+            f"Sustitución: xₙ₊₁ = {fila.x_actual:.6g} − "
+            f"({fila.fx_actual:.6g})({fila.x_actual:.6g} − "
+            f"{fila.x_anterior:.6g}) / ({fila.fx_actual:.6g} − "
+            f"{fila.fx_anterior:.6g})\n"
+            f"= {fila.aproximacion:.10g}\n"
+            f"f(xₙ₊₁) = {fila.f_aproximacion:.10g}\n"
+            f"Ea: {fila.error_relativo:.6g} %\n\n{criterio}"
+        )
+        self.secante_explicacion.config(text=texto)
+        self._iteracion_seleccionada_secante = fila
+
+    def limpiar_secante(self):
+        for atributo in (
+            "secante_funcion", "secante_x_anterior", "secante_x_actual",
+            "secante_error", "secante_max_iter",
+        ):
+            getattr(self, atributo).delete(0, tk.END)
+        self.secante_raiz.config(text="—")
+        self.secante_error_final.config(text="—")
+        self.secante_iteraciones_total.config(text="—")
+        self.secante_continuidad.config(text="Pendiente", fg=TEXT_MUTED)
+        self.secante_estado.config(text="Esperando datos", fg=TEXT_MUTED)
+        self._resultado_secante = None
+        self._funcion_grafica_secante = None
+        self._iteracion_seleccionada_secante = None
+        self.secante_selector["values"] = ()
+        self.secante_selector.set("")
+        for item in self.secante_tabla.get_children():
+            self.secante_tabla.delete(item)
+        self.secante_explicacion.config(
+            text="Ingresa una función y dos valores iniciales para comenzar."
+        )
+        self._dibujar_grafica_secante()
 
     def _zoom_grafica_newton(self, event):
         if event.num == 4 or (hasattr(event, "delta") and event.delta > 0):

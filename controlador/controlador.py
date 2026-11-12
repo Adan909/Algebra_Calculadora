@@ -1,8 +1,12 @@
+import math
+from fractions import Fraction
+
 from vista.ventana_principal import VentanaPrincipal
 from modelo.solucionador import SolucionadorGauss, SolucionadorGaussJordan, SolucionadorLU
 from modelo.biseccion import FuncionMatematica, biseccion, verificar_continuidad, ResultadoContinuidad
 from modelo.regula_falsi import calcular_regula_falsi
 from modelo.newton_raphson import newton_raphson
+from modelo.secante import secante
 # Importar funciones de modelo
 from modelo.matriz import formatear_fraccion, formatear_matriz
 from modelo.vectores import (
@@ -209,6 +213,63 @@ class Controlador:
             entrada.delete(0, "end")
             entrada.insert(0, valor)
         self.calcular_newton_raphson()
+
+    def calcular_secante(self):
+        try:
+            funcion = FuncionMatematica(self.vista.secante_funcion.get())
+            resultado = secante(
+                funcion,
+                self.vista.secante_x_anterior.get().strip(),
+                self.vista.secante_x_actual.get().strip(),
+                self.vista.secante_error.get().strip(),
+                self.vista.secante_max_iter.get().strip(),
+            )
+        except (ValueError, OverflowError) as error:
+            self.vista.mostrar_error("Entrada no válida", str(error))
+            return
+        self.vista.mostrar_resultado_secante(resultado, funcion)
+
+    def graficar_secante(self):
+        try:
+            funcion = FuncionMatematica(self.vista.secante_funcion.get())
+        except (ValueError, OverflowError) as error:
+            self.vista.mostrar_error("Función no válida", str(error))
+            return
+        self.vista.mostrar_grafica_secante(funcion)
+
+    def analizar_continuidad_secante(self):
+        try:
+            funcion = FuncionMatematica(self.vista.secante_funcion.get())
+            x_anterior = float(Fraction(self.vista.secante_x_anterior.get().strip()))
+            x_actual = float(Fraction(self.vista.secante_x_actual.get().strip()))
+            if not all(map(math.isfinite, (x_anterior, x_actual))):
+                raise ValueError("Los valores iniciales deben ser números reales finitos.")
+            resultado = funcion.analizar_continuidad(
+                min(x_anterior, x_actual), max(x_anterior, x_actual),
+            )
+        except (ValueError, OverflowError) as error:
+            self.vista.mostrar_error("Error de Continuidad", str(error))
+            return
+        self.vista.secante_continuidad.config(
+            text="Continua ✓" if resultado.es_continua else "Discontinua ✗",
+        )
+        self.vista.mostrar_demostracion_continuidad(resultado)
+
+    def cargar_ejemplo_secante(self):
+        valores = (
+            (self.vista.secante_funcion, "x^2 - 2"),
+            (self.vista.secante_x_anterior, "1"),
+            (self.vista.secante_x_actual, "2"),
+            (self.vista.secante_error, "0.0001"),
+            (self.vista.secante_max_iter, "20"),
+        )
+        for entrada, valor in valores:
+            entrada.delete(0, "end")
+            entrada.insert(0, valor)
+        self.calcular_secante()
+
+    def limpiar_secante(self):
+        self.vista.limpiar_secante()
 
     def limpiar_biseccion(self):
         self.vista.limpiar_biseccion()
