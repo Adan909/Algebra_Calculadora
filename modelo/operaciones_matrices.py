@@ -148,22 +148,33 @@ def sumar_matrices(A, B):
     La suma solamente es posible cuando ambas matrices
     tienen las mismas dimensiones.
     """
+    resultado, _ = sumar_matrices_con_pasos(A, B)
+    return resultado
+
+
+def sumar_matrices_con_pasos(A, B):
+    """Retorna la suma de dos matrices y el cálculo de cada elemento."""
     if not validar_misma_dimension(A, B):
         raise ValueError(
             "Las matrices deben tener las mismas dimensiones."
         )
 
     resultado = []
+    pasos = ["Sumamos los elementos que ocupan la misma posición:"]
 
     for i in range(len(A)):
         fila = []
 
         for j in range(len(A[0])):
-            fila.append(A[i][j] + B[i][j])
+            valor = A[i][j] + B[i][j]
+            fila.append(valor)
+            pasos.append(
+                f"c_{i + 1},{j + 1} = {A[i][j]} + {B[i][j]} = {valor}"
+            )
 
         resultado.append(fila)
 
-    return resultado
+    return resultado, pasos
 
 
 def restar_matrices(A, B):
@@ -180,22 +191,33 @@ def restar_matrices(A, B):
 
     Ambas matrices deben tener las mismas dimensiones.
     """
+    resultado, _ = restar_matrices_con_pasos(A, B)
+    return resultado
+
+
+def restar_matrices_con_pasos(A, B):
+    """Retorna la resta de dos matrices y el cálculo de cada elemento."""
     if not validar_misma_dimension(A, B):
         raise ValueError(
             "Las matrices deben tener las mismas dimensiones."
         )
 
     resultado = []
+    pasos = ["Restamos los elementos que ocupan la misma posición:"]
 
     for i in range(len(A)):
         fila = []
 
         for j in range(len(A[0])):
-            fila.append(A[i][j] - B[i][j])
+            valor = A[i][j] - B[i][j]
+            fila.append(valor)
+            pasos.append(
+                f"c_{i + 1},{j + 1} = {A[i][j]} - {B[i][j]} = {valor}"
+            )
 
         resultado.append(fila)
 
-    return resultado
+    return resultado, pasos
 
 
 def multiplicar_matriz_escalar(A, escalar):
@@ -247,6 +269,12 @@ def multiplicar_matrices(A, B):
     El número de columnas de A debe ser igual al número
     de filas de B.
     """
+    resultado, _ = multiplicar_matrices_con_pasos(A, B)
+    return resultado
+
+
+def multiplicar_matrices_con_pasos(A, B):
+    """Retorna el producto de dos matrices y el cálculo de cada elemento."""
     if len(A) == 0 or len(B) == 0:
         raise ValueError("Las matrices no pueden estar vacías.")
 
@@ -264,21 +292,31 @@ def multiplicar_matrices(A, B):
     columnas_B = len(B[0])
 
     resultado = []
+    pasos = [
+        "Cada elemento se obtiene multiplicando una fila de A por una columna de B:"
+    ]
 
     for i in range(filas_A):
         fila_resultado = []
 
         for j in range(columnas_B):
             suma = Fraction(0)
+            productos = []
 
             for k in range(columnas_A):
-                suma += A[i][k] * B[k][j]
+                producto = A[i][k] * B[k][j]
+                suma += producto
+                productos.append(f"({A[i][k]} × {B[k][j]})")
 
             fila_resultado.append(suma)
+            pasos.append(
+                f"c_{i + 1},{j + 1} = "
+                f"{' + '.join(productos)} = {suma}"
+            )
 
         resultado.append(fila_resultado)
 
-    return resultado
+    return resultado, pasos
 
 
 def invertir_matriz(A):

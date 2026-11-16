@@ -16,10 +16,11 @@ from modelo.vectores import (
     es_combinacion_lineal
 )
 from modelo.operaciones_matrices import (
-    sumar_matrices,
-    restar_matrices,
+    sumar_matrices_con_pasos,
+    restar_matrices_con_pasos,
     multiplicar_matriz_escalar,
     multiplicar_matrices,
+    multiplicar_matrices_con_pasos,
     determinante_sarrus,
     determinante_cofactores,
     invertir_matriz,
@@ -597,15 +598,24 @@ class Controlador:
                 A = self.leer_matriz(self.vista.mat_entries_a)
                 B = self.leer_matriz(self.vista.mat_entries_b)
                 if operacion == "suma":
-                    resultado = sumar_matrices(A, B)
+                    resultado, pasos = sumar_matrices_con_pasos(A, B)
                     titulo = "A + B"
                 elif operacion == "resta":
-                    resultado = restar_matrices(A, B)
+                    resultado, pasos = restar_matrices_con_pasos(A, B)
                     titulo = "A − B"
                 else:
-                    resultado = multiplicar_matrices(A, B)
+                    resultado, pasos = multiplicar_matrices_con_pasos(A, B)
                     titulo = "A × B"
-                texto = f"RESULTADO: {titulo}\n\n" + self.formatear_matriz_resultado(resultado)
+                separador = "=" * 58
+                texto = f"RESULTADO: {titulo}\n{separador}\n\n"
+                texto += f"MATRIZ A ({len(A)}×{len(A[0])}):\n"
+                texto += self.formatear_matriz_resultado(A) + "\n"
+                texto += f"MATRIZ B ({len(B)}×{len(B[0])}):\n"
+                texto += self.formatear_matriz_resultado(B) + "\n"
+                texto += f"DESARROLLO PASO A PASO\n{'-' * 58}\n"
+                texto += "\n".join(pasos) + "\n\n"
+                texto += f"{separador}\nRESULTADO FINAL: {titulo} =\n"
+                texto += self.formatear_matriz_resultado(resultado)
 
             elif operacion == "escalar":
                 A = self.leer_matriz(self.vista.mat_entries_a)
