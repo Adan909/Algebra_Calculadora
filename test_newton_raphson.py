@@ -107,7 +107,9 @@ class PruebasNewtonRaphson(unittest.TestCase):
         try:
             app = Controlador(root)
             vista = app.vista
-            vista.nb_main.select(vista.tab_newton)
+            vista._al_cambiar_modulo(
+                vista.nb_main.index(vista.tab_newton), "Newton-Raphson",
+            )
             for campo, valor in (
                 (vista.newton_funcion, "x^2 - 2"),
                 (vista.newton_x_inicial, "3/2"),

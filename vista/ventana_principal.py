@@ -28,7 +28,7 @@ from vista.tema import (
 )
 from vista.componentes import (
     BotonPrimario, BotonSecundario, BotonFantasma,
-    Tarjeta, SpinboxNumerico, ControlSegmentado, ChipSistema,
+    Tarjeta, SpinboxNumerico, ChipSistema,
     BadgeEstado, Tooltip, EstadoVacio, CeldaMatriz, ScrollableFrame,
     InterruptorTema
 )
@@ -44,6 +44,7 @@ class VentanaPrincipal:
         self.controlador = controlador
         self._op_count = 0
         self._root_fullscreen = False
+        self._portada_activa = False
 
         self.root.title("Algebra Computation Engine")
         self.root.geometry("1280x880")
@@ -85,12 +86,25 @@ class VentanaPrincipal:
         self._iniciar_reloj()
 
     def _actualizar_region_scroll(self, _event=None):
-        self._scroll_canvas.configure(scrollregion=self._scroll_canvas.bbox("all"))
+        if self._portada_activa:
+            ancho = self._scroll_canvas.winfo_width()
+            alto = self._scroll_canvas.winfo_height()
+            self._scroll_canvas.configure(scrollregion=(0, 0, ancho, alto))
+            self._scroll_canvas.yview_moveto(0)
+        else:
+            self._scroll_canvas.configure(scrollregion=self._scroll_canvas.bbox("all"))
 
     def _ajustar_contenido_scroll(self, event):
-        alto = max(event.height, self._contenido_scroll.winfo_reqheight())
+        self._redimensionar_contenido_scroll(event.width, event.height)
+
+    def _redimensionar_contenido_scroll(self, ancho, alto_visible):
+        alto = (
+            alto_visible
+            if self._portada_activa
+            else max(alto_visible, self._contenido_scroll.winfo_reqheight())
+        )
         self._scroll_canvas.itemconfigure(
-            self._ventana_scroll, width=event.width, height=alto
+            self._ventana_scroll, width=ancho, height=alto
         )
 
     # ==========================================================================
@@ -193,6 +207,8 @@ class VentanaPrincipal:
             "Regla Falsa",
             "Newton-Raphson",
             "Método de la Secante",
+            "Método de Jacobi",
+            "Método de Gauss-Seidel",
         ]
         right_box = tk.Frame(header_bar, bg=BG_CARD)
         right_box.pack(side=tk.RIGHT, fill=tk.Y, padx=(10, 18))
@@ -212,14 +228,85 @@ class VentanaPrincipal:
         tk.Frame(self._contenido_scroll, bg=BORDER_SUBTLE, height=1).pack(fill=tk.X, side=tk.TOP)
 
     def _al_cambiar_modulo(self, index, nombre):
-        if hasattr(self, "nb_main"):
-            self.nb_main.select(index)
+        if not hasattr(self, "nb_main") or not 0 <= index < len(self.modulos):
+            return
+        self._modulo_seleccionado = index
+        self._portada_activa = False
+        self._scrollbar_vertical.grid()
+        self.nb_main.select(index)
+        grupo = self._grupo_de_modulo[index]
+        self._expandir_grupo(grupo)
+        self._actualizar_seleccion_metodo(index)
+        self.root.update_idletasks()
+        self._redimensionar_contenido_scroll(
+            self._scroll_canvas.winfo_width(),
+            self._scroll_canvas.winfo_height(),
+        )
+        self._actualizar_region_scroll()
 
     def _sincronizar_navegacion_modulo(self, _event=None):
-        if not hasattr(self, "nav_segmentada") or not hasattr(self, "nb_main"):
+        if not hasattr(self, "nb_main"):
             return
-        indice = self.nb_main.index("current")
-        self.nav_segmentada.seleccionar(indice, notificar=False)
+        seleccion = self.nb_main.select()
+        if not seleccion:
+            return
+        try:
+            indice = self.nb_main.index(seleccion)
+        except tk.TclError:
+            return
+        if indice == len(self.modulos):
+            self._mostrar_presentacion()
+            return
+        self._al_cambiar_modulo(indice, self.modulos[indice])
+
+    def _mostrar_presentacion(self):
+        self._modulo_seleccionado = None
+        self._portada_activa = True
+        if self.nb_main.select() != str(self.presentacion):
+            self.nb_main.select(self.presentacion)
+        for nombre, datos in self.grupos_navegacion.items():
+            if datos["expandido"]:
+                datos["contenido"].pack_forget()
+                datos["expandido"] = False
+                datos["boton"].configure(text=f"▸  {nombre}")
+        self._actualizar_seleccion_metodo(None)
+        self._scrollbar_vertical.grid_remove()
+        self.root.update_idletasks()
+        self._redimensionar_contenido_scroll(
+            self._scroll_canvas.winfo_width(),
+            self._scroll_canvas.winfo_height(),
+        )
+        self._actualizar_region_scroll()
+
+    def _expandir_grupo(self, nombre):
+        for grupo, datos in self.grupos_navegacion.items():
+            if grupo == nombre:
+                if not datos["expandido"]:
+                    datos["contenido"].grid()
+                    datos["expandido"] = True
+                    datos["boton"].configure(text=f"▾  {grupo}")
+            elif datos["expandido"]:
+                datos["contenido"].grid_remove()
+                datos["expandido"] = False
+                datos["boton"].configure(text=f"▸  {grupo}")
+
+    def _alternar_grupo(self, nombre):
+        datos = self.grupos_navegacion[nombre]
+        if datos["expandido"]:
+            datos["contenido"].grid_remove()
+            datos["expandido"] = False
+            datos["boton"].configure(text=f"▸  {nombre}")
+        else:
+            self._expandir_grupo(nombre)
+
+    def _actualizar_seleccion_metodo(self, indice):
+        for metodo_indice, boton in self.botones_metodos.items():
+            seleccionado = metodo_indice == indice
+            boton.configure(
+                bg=ACCENT_SOFT if seleccionado else BG_CARD,
+                fg=ACCENT_PRIMARY if seleccionado else TEXT_SECONDARY,
+                font=FONT_SMALL_BOLD if seleccionado else FONT_SMALL,
+            )
 
     # ==========================================================================
     # GESTIÓN Y CONMUTACIÓN DINÁMICA DE TEMA (CLARO / OSCURO)
@@ -252,7 +339,7 @@ class VentanaPrincipal:
     def _guardar_estado(self):
         estado = {}
         try:
-            estado["tab_idx"] = self.nav_segmentada.seleccionado if hasattr(self, "nav_segmentada") else 0
+            estado["tab_idx"] = getattr(self, "_modulo_seleccionado", None)
             estado["op_count"] = self._op_count
 
             # Gauss
@@ -263,8 +350,85 @@ class VentanaPrincipal:
             estado["gauss_vec"] = [e.get() for e in getattr(self, "vector_entries", [])]
             estado["gauss_sol"] = self.txt_solucion.get("1.0", tk.END).strip() if hasattr(self, "txt_solucion") else ""
             estado["gauss_hist"] = self.txt_historial.get("1.0", tk.END).strip() if hasattr(self, "txt_historial") else ""
-            estado["gauss_badge_texto"] = self.badge_clasificacion.lbl_text.cget("text") if hasattr(self, "badge_clasificacion") else ""
+            estado["gauss_badge_texto"] = self.badge_clasificacion.lbl.cget("text") if hasattr(self, "badge_clasificacion") else ""
             estado["gauss_badge_tipo"] = getattr(self.badge_clasificacion, "_tipo", "info") if hasattr(self, "badge_clasificacion") else "info"
+
+            # Jacobi
+            estado["jacobi_n"] = self.jacobi_spin_n.get_int() if hasattr(self, "jacobi_spin_n") else 3
+            estado["jacobi_mat"] = [
+                [e.get() for e in fila]
+                for fila in getattr(self, "jacobi_matriz_entries", [])
+            ]
+            estado["jacobi_vec"] = [
+                e.get() for e in getattr(self, "jacobi_vector_entries", [])
+            ]
+            estado["jacobi_x0"] = [
+                e.get() for e in getattr(self, "jacobi_inicial_entries", [])
+            ]
+            estado["jacobi_tolerancia"] = (
+                self.jacobi_tolerancia.get()
+                if hasattr(self, "jacobi_tolerancia") else "1e-10"
+            )
+            estado["jacobi_max"] = (
+                self.jacobi_max_iter.get()
+                if hasattr(self, "jacobi_max_iter") else "100"
+            )
+            estado["jacobi_resultado"] = getattr(self, "_resultado_jacobi", None)
+            estado["jacobi_zoom"] = getattr(self, "_zoom_jacobi", 1.0)
+            estado["jacobi_pan_x"] = getattr(self, "_desplazamiento_x_jacobi", 0.0)
+            estado["jacobi_pan_y"] = getattr(self, "_desplazamiento_y_jacobi", 0.0)
+            estado["jacobi_iteracion"] = (
+                self._iteracion_seleccionada_jacobi.numero
+                if getattr(self, "_iteracion_seleccionada_jacobi", None) else None
+            )
+            estado["jacobi_diagnostico"] = (
+                self.jacobi_condicion.cget("text")
+                if hasattr(self, "jacobi_condicion") else "Pendiente"
+            )
+
+            # Gauss-Seidel
+            estado["gauss_seidel_n"] = (
+                self.gauss_seidel_spin_n.get_int()
+                if hasattr(self, "gauss_seidel_spin_n") else 3
+            )
+            estado["gauss_seidel_mat"] = [
+                [e.get() for e in fila]
+                for fila in getattr(self, "gauss_seidel_matriz_entries", [])
+            ]
+            estado["gauss_seidel_vec"] = [
+                e.get() for e in getattr(self, "gauss_seidel_vector_entries", [])
+            ]
+            estado["gauss_seidel_x0"] = [
+                e.get() for e in getattr(self, "gauss_seidel_inicial_entries", [])
+            ]
+            estado["gauss_seidel_tolerancia"] = (
+                self.gauss_seidel_tolerancia.get()
+                if hasattr(self, "gauss_seidel_tolerancia") else "1e-10"
+            )
+            estado["gauss_seidel_max"] = (
+                self.gauss_seidel_max_iter.get()
+                if hasattr(self, "gauss_seidel_max_iter") else "100"
+            )
+            estado["gauss_seidel_resultado"] = getattr(
+                self, "_resultado_gauss_seidel", None,
+            )
+            estado["gauss_seidel_zoom"] = getattr(
+                self, "_zoom_gauss_seidel", 1.0,
+            )
+            estado["gauss_seidel_pan_x"] = getattr(
+                self, "_desplazamiento_x_gauss_seidel", 0.0,
+            )
+            estado["gauss_seidel_pan_y"] = getattr(
+                self, "_desplazamiento_y_gauss_seidel", 0.0,
+            )
+            estado["gauss_seidel_iteracion"] = (
+                self._iteracion_seleccionada_gauss_seidel.numero
+                if getattr(self, "_iteracion_seleccionada_gauss_seidel", None) else None
+            )
+            estado["gauss_seidel_diagnostico"] = (
+                self.gauss_seidel_condicion.cget("text")
+                if hasattr(self, "gauss_seidel_condicion") else "Pendiente"
+            )
 
             # Vectorial & Matrices
             estado["vec_dim"] = self.spin_dim_v.get_int() if hasattr(self, "spin_dim_v") else 3
@@ -385,7 +549,92 @@ class VentanaPrincipal:
                 if hist_txt:
                     self.actualizar_historial(hist_txt)
                 if badge_txt and hasattr(self, "badge_clasificacion"):
-                    self.badge_clasificacion.actualizar(badge_txt, badge_tipo)
+                    self.badge_clasificacion.set_estado(badge_txt, badge_tipo)
+
+            # Restaurar Jacobi
+            jacobi_n = estado.get("jacobi_n", 3)
+            self.jacobi_spin_n.set(jacobi_n)
+            self.jacobi_tolerancia.delete(0, tk.END)
+            self.jacobi_tolerancia.insert(0, estado.get("jacobi_tolerancia", "1e-10"))
+            self.jacobi_max_iter.set(estado.get("jacobi_max", 100))
+            self.construir_matriz_jacobi(jacobi_n)
+            for i, fila in enumerate(self.jacobi_matriz_entries):
+                for j, entry in enumerate(fila):
+                    if i < len(estado.get("jacobi_mat", [])) and j < len(estado["jacobi_mat"][i]):
+                        entry.delete(0, tk.END)
+                        entry.insert(0, estado["jacobi_mat"][i][j])
+            for i, entry in enumerate(self.jacobi_vector_entries):
+                if i < len(estado.get("jacobi_vec", [])):
+                    entry.delete(0, tk.END)
+                    entry.insert(0, estado["jacobi_vec"][i])
+            for i, entry in enumerate(self.jacobi_inicial_entries):
+                if i < len(estado.get("jacobi_x0", [])):
+                    entry.delete(0, tk.END)
+                    entry.insert(0, estado["jacobi_x0"][i])
+            resultado_jacobi = estado.get("jacobi_resultado")
+            if resultado_jacobi:
+                self.mostrar_resultado_jacobi(resultado_jacobi)
+                self._zoom_jacobi = estado.get("jacobi_zoom", 1.0)
+                self._desplazamiento_x_jacobi = estado.get("jacobi_pan_x", 0.0)
+                self._desplazamiento_y_jacobi = estado.get("jacobi_pan_y", 0.0)
+                numero_iteracion = estado.get("jacobi_iteracion")
+                if numero_iteracion:
+                    indice = numero_iteracion - 1
+                    if 0 <= indice < len(resultado_jacobi.iteraciones):
+                        self.jacobi_selector.current(indice)
+                        self.jacobi_tabla.selection_set(str(indice))
+                        self._mostrar_iteracion_jacobi(indice)
+                self._dibujar_grafica_jacobi()
+            self.jacobi_condicion.config(
+                text=estado.get("jacobi_diagnostico", "Pendiente"),
+            )
+
+            # Restaurar Gauss-Seidel
+            gauss_seidel_n = estado.get("gauss_seidel_n", 3)
+            self.gauss_seidel_spin_n.set(gauss_seidel_n)
+            self.gauss_seidel_tolerancia.delete(0, tk.END)
+            self.gauss_seidel_tolerancia.insert(
+                0, estado.get("gauss_seidel_tolerancia", "1e-10"),
+            )
+            self.gauss_seidel_max_iter.set(estado.get("gauss_seidel_max", 100))
+            self.construir_matriz_gauss_seidel(gauss_seidel_n)
+            for i, fila in enumerate(self.gauss_seidel_matriz_entries):
+                for j, entry in enumerate(fila):
+                    if (
+                        i < len(estado.get("gauss_seidel_mat", []))
+                        and j < len(estado["gauss_seidel_mat"][i])
+                    ):
+                        entry.delete(0, tk.END)
+                        entry.insert(0, estado["gauss_seidel_mat"][i][j])
+            for i, entry in enumerate(self.gauss_seidel_vector_entries):
+                if i < len(estado.get("gauss_seidel_vec", [])):
+                    entry.delete(0, tk.END)
+                    entry.insert(0, estado["gauss_seidel_vec"][i])
+            for i, entry in enumerate(self.gauss_seidel_inicial_entries):
+                if i < len(estado.get("gauss_seidel_x0", [])):
+                    entry.delete(0, tk.END)
+                    entry.insert(0, estado["gauss_seidel_x0"][i])
+            resultado_gauss_seidel = estado.get("gauss_seidel_resultado")
+            if resultado_gauss_seidel:
+                self.mostrar_resultado_gauss_seidel(resultado_gauss_seidel)
+                self._zoom_gauss_seidel = estado.get("gauss_seidel_zoom", 1.0)
+                self._desplazamiento_x_gauss_seidel = estado.get(
+                    "gauss_seidel_pan_x", 0.0,
+                )
+                self._desplazamiento_y_gauss_seidel = estado.get(
+                    "gauss_seidel_pan_y", 0.0,
+                )
+                numero_iteracion = estado.get("gauss_seidel_iteracion")
+                if numero_iteracion:
+                    indice = numero_iteracion - 1
+                    if 0 <= indice < len(resultado_gauss_seidel.iteraciones):
+                        self.gauss_seidel_selector.current(indice)
+                        self.gauss_seidel_tabla.selection_set(str(indice))
+                        self._mostrar_iteracion_gauss_seidel(indice)
+                self._dibujar_grafica_gauss_seidel()
+            self.gauss_seidel_condicion.config(
+                text=estado.get("gauss_seidel_diagnostico", "Pendiente"),
+            )
 
             # Restaurar Vectorial & Matrices
             v_dim = estado.get("vec_dim", 3)
@@ -567,11 +816,11 @@ class VentanaPrincipal:
                 self._dibujar_grafica_secante()
 
             # Seleccionar pestaña principal
-            tab_idx = estado.get("tab_idx", 0)
-            if hasattr(self, "nav_segmentada"):
-                self.nav_segmentada.seleccionar(tab_idx)
-            if hasattr(self, "nb_main"):
-                self.nb_main.select(tab_idx)
+            tab_idx = estado.get("tab_idx")
+            if tab_idx is None:
+                self._mostrar_presentacion()
+            elif isinstance(tab_idx, int) and 0 <= tab_idx < len(self.modulos):
+                self._al_cambiar_modulo(tab_idx, self.modulos[tab_idx])
         except Exception:
             pass
 
@@ -615,17 +864,79 @@ class VentanaPrincipal:
             sidebar, text="MÉTODOS", font=FONT_SMALL_BOLD,
             bg=BG_CARD, fg=TEXT_MUTED, anchor="w",
         ).pack(fill=tk.X, padx=12, pady=(14, 8))
-        self.nav_segmentada = ControlSegmentado(
-            sidebar, self.modulos, comando=self._al_cambiar_modulo,
-            initial_index=0, orient=tk.VERTICAL,
+        tk.Button(
+            sidebar, text="⌂  Inicio", font=FONT_SMALL_BOLD, anchor="w",
+            bg=BG_CARD, fg=TEXT_PRIMARY, activebackground=BG_HOVER,
+            activeforeground=TEXT_PRIMARY, relief="flat", bd=0, cursor="hand2",
+            command=self._mostrar_presentacion,
+        ).pack(fill=tk.X, padx=8, pady=(0, 5), ipady=5)
+        definiciones_grupos = (
+            ("Algebra Lineal", (0, 1)),
+            ("Operaciones especiales", (2, 3)),
+            ("Metodos Numericos", (4, 5, 6, 7, 8, 9)),
         )
-        self.nav_segmentada.pack(fill=tk.X, padx=8, pady=(0, 10))
+        self._grupo_de_modulo = {
+            indice: nombre
+            for nombre, indices in definiciones_grupos
+            for indice in indices
+        }
+        self.grupos_navegacion = {}
+        self.botones_metodos = {}
+        for nombre, indices in definiciones_grupos:
+            marco_grupo = tk.Frame(
+                sidebar, bg=BG_CARD,
+                highlightthickness=1, highlightbackground=BORDER_SUBTLE,
+            )
+            marco_grupo.pack(fill=tk.X, padx=7, pady=4)
+            marco_grupo.grid_columnconfigure(0, weight=1)
+            boton_grupo = tk.Button(
+                marco_grupo, text=f"▸  {nombre}",
+                font=FONT_SMALL_BOLD, anchor="w",
+                bg=BG_CARD, fg=TEXT_PRIMARY, activebackground=BG_HOVER,
+                activeforeground=TEXT_PRIMARY, relief="flat", bd=0,
+                cursor="hand2",
+                command=lambda grupo=nombre: self._alternar_grupo(grupo),
+            )
+            boton_grupo.grid(
+                row=0, column=0, sticky="ew", padx=6, pady=5, ipady=3,
+            )
+            contenido_grupo = tk.Frame(marco_grupo, bg=BG_CARD)
+            contenido_grupo.grid(
+                row=1, column=0, sticky="ew", padx=6, pady=(0, 6),
+            )
+            contenido_grupo.grid_remove()
+            self.grupos_navegacion[nombre] = {
+                "marco": marco_grupo,
+                "boton": boton_grupo,
+                "contenido": contenido_grupo,
+                "expandido": False,
+            }
+            for indice in indices:
+                marco_metodo = tk.Frame(
+                    contenido_grupo, bg=BG_CARD,
+                    highlightthickness=1, highlightbackground=BORDER_SUBTLE,
+                )
+                marco_metodo.pack(fill=tk.X, pady=2)
+                boton_metodo = tk.Button(
+                    marco_metodo, text=f"  {self.modulos[indice]}",
+                    font=FONT_SMALL, anchor="w", justify=tk.LEFT,
+                    bg=BG_CARD, fg=TEXT_SECONDARY,
+                    activebackground=BG_HOVER, activeforeground=TEXT_PRIMARY,
+                    relief="flat", bd=0, cursor="hand2",
+                    command=lambda i=indice: self._al_cambiar_modulo(
+                        i, self.modulos[i],
+                    ),
+                )
+                boton_metodo.pack(fill=tk.X, padx=3, pady=3, ipady=2)
+                self.botones_metodos[indice] = boton_metodo
+
+        self.area_modulos = tk.Frame(container, bg=BG_WINDOW)
+        self.area_modulos.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
         s = ttk.Style()
         s.layout("Hidden.TNotebook.Tab", [])
-        self.nb_main = ttk.Notebook(container, style="Hidden.TNotebook")
-        self.nb_main.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        self.nb_main.bind("<<NotebookTabChanged>>", self._sincronizar_navegacion_modulo)
+        self.nb_main = ttk.Notebook(self.area_modulos, style="Hidden.TNotebook")
+        self.nb_main.pack(fill=tk.BOTH, expand=True)
 
         self.tab_gauss     = tk.Frame(self.nb_main, bg=BG_WINDOW)
         self.tab_vectorial = tk.Frame(self.nb_main, bg=BG_WINDOW)
@@ -635,6 +946,8 @@ class VentanaPrincipal:
         self.tab_rf        = tk.Frame(self.nb_main, bg=BG_WINDOW)
         self.tab_newton    = tk.Frame(self.nb_main, bg=BG_WINDOW)
         self.tab_secante   = tk.Frame(self.nb_main, bg=BG_WINDOW)
+        self.tab_jacobi    = tk.Frame(self.nb_main, bg=BG_WINDOW)
+        self.tab_gauss_seidel = tk.Frame(self.nb_main, bg=BG_WINDOW)
 
         self.nb_main.add(self.tab_gauss,     text="Gauss-Jordan")
         self.nb_main.add(self.tab_vectorial, text="Vectorial & Matrices")
@@ -644,6 +957,64 @@ class VentanaPrincipal:
         self.nb_main.add(self.tab_rf,        text="Regla Falsa")
         self.nb_main.add(self.tab_newton,    text="Newton-Raphson")
         self.nb_main.add(self.tab_secante,   text="Método de la Secante")
+        self.nb_main.add(self.tab_jacobi,    text="Método de Jacobi")
+        self.nb_main.add(self.tab_gauss_seidel, text="Método de Gauss-Seidel")
+
+        self.presentacion = tk.Frame(
+            self.nb_main, bg=BG_CARD,
+            highlightthickness=1, highlightbackground=BORDER_SUBTLE,
+        )
+        self.portada = tk.Frame(self.presentacion, bg=BG_CARD)
+        self.portada.pack(expand=True, padx=36, pady=36)
+        tk.Label(
+            self.portada, text="¡Bienvenido a Algebra Computation Engine!",
+            font=FONT_TITLE_LG, bg=BG_CARD, fg=TEXT_PRIMARY,
+            justify=tk.CENTER, wraplength=760,
+        ).pack(pady=(0, 12))
+        tk.Label(
+            self.portada,
+            text=(
+                "Tu espacio para explorar álgebra lineal, operaciones especiales "
+                "y métodos numéricos."
+            ),
+            font=FONT_BODY, bg=BG_CARD, fg=TEXT_SECONDARY,
+            justify=tk.CENTER, wraplength=680,
+        ).pack(pady=(0, 28))
+        grupos_inicio = tk.Frame(self.portada, bg=BG_CARD)
+        grupos_inicio.pack(fill=tk.X, pady=(0, 24))
+        resumenes = (
+            ("Algebra Lineal", "Gauss-Jordan\nVectorial & Matrices"),
+            ("Operaciones especiales", "Conversión de Bases\nNúmeros Romanos"),
+            (
+                "Metodos Numericos",
+                "Bisección · Regla Falsa · Newton-Raphson\n"
+                "Secante · Jacobi · Gauss-Seidel",
+            ),
+        )
+        for titulo, descripcion in resumenes:
+            tarjeta = tk.Frame(
+                grupos_inicio, bg=BG_WINDOW,
+                highlightthickness=1, highlightbackground=BORDER_SUBTLE,
+            )
+            tarjeta.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5)
+            tk.Label(
+                tarjeta, text=titulo, font=FONT_SMALL_BOLD,
+                bg=BG_WINDOW, fg=ACCENT_PRIMARY,
+            ).pack(padx=10, pady=(12, 6))
+            tk.Label(
+                tarjeta, text=descripcion, font=FONT_SMALL,
+                bg=BG_WINDOW, fg=TEXT_SECONDARY, justify=tk.CENTER,
+                wraplength=210,
+            ).pack(padx=10, pady=(0, 12))
+        BotonPrimario(
+            self.portada, text="EXPLORAR MÉTODOS",
+            command=lambda: self._alternar_grupo("Algebra Lineal"),
+            font=FONT_SMALL_BOLD,
+        ).pack()
+        self.nb_main.add(self.presentacion, text="Presentación")
+        self.nb_main.bind(
+            "<<NotebookTabChanged>>", self._sincronizar_navegacion_modulo,
+        )
 
         self._build_gauss()
         self._build_vectorial()
@@ -653,6 +1024,9 @@ class VentanaPrincipal:
         self._build_regula_falsi()
         self._build_newton_raphson()
         self._build_secante()
+        self._build_jacobi()
+        self._build_gauss_seidel()
+        self._mostrar_presentacion()
 
     # ==========================================================================
     # HELPERS Y CONSOLA DE PANTALLA COMPLETA
@@ -1105,6 +1479,1166 @@ class VentanaPrincipal:
         Tooltip(btn_fs, "Abre los resultados en pantalla completa para proyectar")
 
         self.construir_cuadricula(3, 3)
+
+    def _build_jacobi(self):
+        parent = self.tab_jacobi
+        tarjeta_cfg = Tarjeta(
+            parent,
+            titulo="Método de Jacobi · Sistemas Lineales",
+            subtitulo="Iteración simultánea: xᵢ⁽ᵏ⁺¹⁾ = (bᵢ − Σⱼ≠ᵢ aᵢⱼxⱼ⁽ᵏ⁾) / aᵢᵢ",
+        )
+        tarjeta_cfg.pack(fill=tk.X, pady=(0, 8))
+
+        fields = tk.Frame(tarjeta_cfg.contenido, bg=BG_CARD)
+        fields.pack(fill=tk.X, pady=(0, 6))
+        specs = (
+            ("Orden n:", "jacobi_spin_n", 3, 5, "spin"),
+            ("Tolerancia:", "jacobi_tolerancia", "1e-10", 12, "entry"),
+            ("Máx. Iter:", "jacobi_max_iter", 100, 8, "spin"),
+        )
+        for columna, (label, atributo, inicial, ancho, tipo) in enumerate(specs):
+            cell = tk.Frame(fields, bg=BG_CARD)
+            cell.grid(row=0, column=columna, sticky="ew", padx=(0, 10))
+            tk.Label(
+                cell, text=label, font=FONT_SMALL_BOLD,
+                bg=BG_CARD, fg=TEXT_PRIMARY,
+            ).pack(anchor="w", pady=(0, 2))
+            if tipo == "spin":
+                limites = (1, 10) if atributo == "jacobi_spin_n" else (1, 100000)
+                entrada = SpinboxNumerico(
+                    cell, min_val=limites[0], max_val=limites[1],
+                    initial_val=inicial, width=ancho,
+                    on_change=(
+                        lambda _valor: self.construir_matriz_jacobi(
+                            self.jacobi_spin_n.get_int()
+                        )
+                    ) if atributo == "jacobi_spin_n" else None,
+                )
+            else:
+                entrada = CeldaMatriz(cell, valor_inicial=inicial, width=ancho)
+            entrada.pack(fill=tk.X)
+            setattr(self, atributo, entrada)
+            fields.grid_columnconfigure(columna, weight=3 if columna == 1 else 1)
+
+        tarjeta_matriz = Tarjeta(
+            parent, titulo="Matriz Aumentada [ A | b ] y aproximación inicial x⁽⁰⁾",
+            subtitulo="Matriz cuadrada con diagonal principal no nula",
+        )
+        tarjeta_matriz.pack(fill=tk.X, pady=(0, 8))
+        self.scroll_matriz_jacobi = ScrollableFrame(
+            tarjeta_matriz.contenido, bg_color=BG_CARD, fit_content=True,
+        )
+        self.scroll_matriz_jacobi.pack(fill=tk.X, pady=(4, 8))
+        self.jacobi_matriz_entries = []
+        self.jacobi_vector_entries = []
+        self.jacobi_inicial_entries = []
+        self.construir_matriz_jacobi(3)
+
+        actions = tk.Frame(tarjeta_matriz.contenido, bg=BG_CARD)
+        actions.pack(fill=tk.X, pady=(4, 0))
+        BotonPrimario(
+            actions, text="⚡ RESOLVER SISTEMA",
+            command=self.controlador.resolver_jacobi,
+            font=FONT_SMALL_BOLD,
+        ).pack(side=tk.LEFT, padx=(0, 6))
+        BotonSecundario(
+            actions, text="📈 Graficar Convergencia",
+            command=self.controlador.graficar_jacobi,
+            font=FONT_SMALL_BOLD,
+        ).pack(side=tk.LEFT, padx=6)
+        BotonSecundario(
+            actions, text="🔬 Diagnóstico de Convergencia",
+            command=self.controlador.analizar_convergencia_jacobi,
+            font=FONT_SMALL_BOLD,
+        ).pack(side=tk.LEFT, padx=6)
+        BotonSecundario(
+            actions, text="🧹 Limpiar", command=self.controlador.limpiar_jacobi,
+            font=FONT_SMALL_BOLD,
+        ).pack(side=tk.LEFT, padx=6)
+        BotonSecundario(
+            actions, text="★ Ejemplo del Profesor",
+            command=self.controlador.cargar_ejemplo_jacobi,
+            font=FONT_SMALL_BOLD,
+        ).pack(side=tk.LEFT, padx=6)
+        tk.Label(
+            actions,
+            text="Verifica convergencia y residuo en cada iteración",
+            font=FONT_MICRO, bg=BG_CARD, fg=TEXT_MUTED,
+        ).pack(side=tk.RIGHT)
+
+        summary = tk.Frame(parent, bg=BG_WINDOW)
+        summary.pack(fill=tk.X, pady=(0, 8))
+        self.jacobi_aproximacion = self._biseccion_metric(
+            summary, "Vector aproximado", "—", ACCENT_PRIMARY,
+        )
+        self.jacobi_error_final = self._biseccion_metric(
+            summary, "Residuo final ||Ax−b||∞", "—", TEXT_PRIMARY,
+        )
+        self.jacobi_iteraciones_total = self._biseccion_metric(
+            summary, "Iteraciones", "—", TEXT_PRIMARY,
+        )
+        self.jacobi_condicion = self._biseccion_metric(
+            summary, "Dominancia diagonal", "Pendiente", TEXT_MUTED,
+        )
+        self.jacobi_estado = self._biseccion_metric(
+            summary, "Estado", "Esperando datos", TEXT_MUTED,
+        )
+
+        work = tk.Frame(parent, bg=BG_WINDOW)
+        work.pack(fill=tk.BOTH, expand=True, pady=(0, 8))
+        grafica = Tarjeta(
+            work, titulo="Gráfica Interactiva",
+            subtitulo="Arrastra para recorrer · Rueda para zoom · Doble clic para restablecer",
+        )
+        grafica.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 6))
+        self.jacobi_canvas = tk.Canvas(
+            grafica.contenido, height=220, bg=BG_CARD,
+            highlightthickness=0, bd=0,
+        )
+        self.jacobi_canvas.pack(fill=tk.BOTH, expand=True)
+        self.jacobi_canvas.bind(
+            "<Configure>", lambda _event: self._dibujar_grafica_jacobi(),
+        )
+        self.jacobi_canvas.bind("<MouseWheel>", self._zoom_grafica_jacobi)
+        self.jacobi_canvas.bind("<Button-4>", self._zoom_grafica_jacobi)
+        self.jacobi_canvas.bind("<Button-5>", self._zoom_grafica_jacobi)
+        self.jacobi_canvas.bind(
+            "<ButtonPress-1>", self._iniciar_pan_grafica_jacobi,
+        )
+        self.jacobi_canvas.bind("<B1-Motion>", self._mover_pan_grafica_jacobi)
+        self.jacobi_canvas.bind(
+            "<ButtonRelease-1>", self._terminar_pan_grafica_jacobi,
+        )
+        self.jacobi_canvas.bind(
+            "<Double-Button-1>", self._reset_zoom_jacobi,
+        )
+        self._resultado_jacobi = None
+        self._iteracion_seleccionada_jacobi = None
+        self._zoom_jacobi = 1.0
+        self._desplazamiento_x_jacobi = 0.0
+        self._desplazamiento_y_jacobi = 0.0
+        self._escala_x_pan_jacobi = 1.0
+        self._escala_y_pan_jacobi = 1.0
+        self._inicio_pan_jacobi = None
+
+        detalle = Tarjeta(
+            work, titulo="Lectura del Procedimiento",
+            subtitulo="Selecciona una iteración para consultar sustituciones y errores",
+        )
+        detalle.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(6, 0))
+        self.jacobi_selector = ttk.Combobox(
+            detalle.contenido, state="readonly", width=24,
+        )
+        self.jacobi_selector.pack(anchor="w", pady=(0, 6))
+        self.jacobi_selector.bind(
+            "<<ComboboxSelected>>", self._seleccionar_iteracion_jacobi,
+        )
+        self.jacobi_explicacion = tk.Label(
+            detalle.contenido,
+            text="Ingresa A, b y x⁽⁰⁾ para comenzar.",
+            font=(FONT_MONO[0], FONT_MONO[1] + 1), bg=BG_CARD, fg=TEXT_PRIMARY,
+            justify=tk.LEFT, anchor="nw", wraplength=560,
+        )
+        self.jacobi_explicacion.pack(fill=tk.BOTH, expand=True)
+
+        tabla_tarjeta = Tarjeta(
+            parent, titulo="Tabla de Iteraciones",
+            subtitulo="Aproximaciones sucesivas y normas de error y residuo",
+        )
+        tabla_tarjeta.pack(fill=tk.BOTH, expand=True)
+        frame_tabla = tk.Frame(tabla_tarjeta.contenido, bg=BG_CARD)
+        frame_tabla.pack(fill=tk.BOTH, expand=True)
+        frame_tabla.grid_rowconfigure(0, weight=1)
+        frame_tabla.grid_columnconfigure(0, weight=1)
+        columnas = ("i", "vector_anterior", "vector", "diferencia", "residuo")
+        self.jacobi_tabla = ttk.Treeview(
+            frame_tabla, columns=columnas, show="headings",
+            height=7, selectmode="browse",
+        )
+        encabezados = {
+            "i": ("i", 45),
+            "vector_anterior": ("x⁽ᵏ⁻¹⁾", 190),
+            "vector": ("x⁽ᵏ⁾", 190),
+            "diferencia": ("||x⁽ᵏ⁾−x⁽ᵏ⁻¹⁾||∞", 145),
+            "residuo": ("||Ax⁽ᵏ⁾−b||∞", 145),
+        }
+        for columna, (titulo, ancho) in encabezados.items():
+            self.jacobi_tabla.heading(columna, text=titulo)
+            self.jacobi_tabla.column(
+                columna, width=ancho, minwidth=ancho, anchor=tk.CENTER,
+                stretch=columna != "i",
+            )
+        self.jacobi_tabla.tag_configure(
+            "ultima", background=ACCENT_SOFT, foreground=ACCENT_PRIMARY,
+        )
+        self.jacobi_tabla.grid(row=0, column=0, sticky="nsew")
+        scroll_y = ttk.Scrollbar(
+            frame_tabla, orient="vertical", command=self.jacobi_tabla.yview,
+        )
+        scroll_x = ttk.Scrollbar(
+            frame_tabla, orient="horizontal", command=self.jacobi_tabla.xview,
+        )
+        self.jacobi_tabla.configure(
+            yscrollcommand=scroll_y.set, xscrollcommand=scroll_x.set,
+        )
+        scroll_y.grid(row=0, column=1, sticky="ns")
+        scroll_x.grid(row=1, column=0, sticky="ew")
+        self.jacobi_tabla.bind(
+            "<<TreeviewSelect>>", self._seleccionar_fila_jacobi,
+        )
+        self._dibujar_grafica_jacobi()
+
+    def _build_gauss_seidel(self):
+        parent = self.tab_gauss_seidel
+        tarjeta_cfg = Tarjeta(
+            parent,
+            titulo="Método de Gauss-Seidel · Sistemas Lineales",
+            subtitulo="Iteración sucesiva: xᵢ⁽ᵏ⁺¹⁾ = (bᵢ − Σⱼ<ᵢaᵢⱼxⱼ⁽ᵏ⁺¹⁾ − Σⱼ>ᵢaᵢⱼxⱼ⁽ᵏ⁾) / aᵢᵢ",
+        )
+        tarjeta_cfg.pack(fill=tk.X, pady=(0, 8))
+
+        fields = tk.Frame(tarjeta_cfg.contenido, bg=BG_CARD)
+        fields.pack(fill=tk.X, pady=(0, 6))
+        specs = (
+            ("Orden n:", "gauss_seidel_spin_n", 3, 5, "spin"),
+            ("Tolerancia:", "gauss_seidel_tolerancia", "1e-10", 12, "entry"),
+            ("Máx. Iter:", "gauss_seidel_max_iter", 100, 8, "spin"),
+        )
+        for columna, (label, atributo, inicial, ancho, tipo) in enumerate(specs):
+            cell = tk.Frame(fields, bg=BG_CARD)
+            cell.grid(row=0, column=columna, sticky="ew", padx=(0, 10))
+            tk.Label(
+                cell, text=label, font=FONT_SMALL_BOLD,
+                bg=BG_CARD, fg=TEXT_PRIMARY,
+            ).pack(anchor="w", pady=(0, 2))
+            if tipo == "spin":
+                limites = (1, 10) if atributo == "gauss_seidel_spin_n" else (1, 100000)
+                entrada = SpinboxNumerico(
+                    cell, min_val=limites[0], max_val=limites[1],
+                    initial_val=inicial, width=ancho,
+                    on_change=(
+                        lambda _valor: self.construir_matriz_gauss_seidel(
+                            self.gauss_seidel_spin_n.get_int()
+                        )
+                    ) if atributo == "gauss_seidel_spin_n" else None,
+                )
+            else:
+                entrada = CeldaMatriz(cell, valor_inicial=inicial, width=ancho)
+            entrada.pack(fill=tk.X)
+            setattr(self, atributo, entrada)
+            fields.grid_columnconfigure(columna, weight=3 if columna == 1 else 1)
+
+        tarjeta_matriz = Tarjeta(
+            parent, titulo="Matriz Aumentada [ A | b ] y aproximación inicial x⁽⁰⁾",
+            subtitulo="Matriz cuadrada con diagonal principal no nula",
+        )
+        tarjeta_matriz.pack(fill=tk.X, pady=(0, 8))
+        self.scroll_matriz_gauss_seidel = ScrollableFrame(
+            tarjeta_matriz.contenido, bg_color=BG_CARD, fit_content=True,
+        )
+        self.scroll_matriz_gauss_seidel.pack(fill=tk.X, pady=(4, 8))
+        self.gauss_seidel_matriz_entries = []
+        self.gauss_seidel_vector_entries = []
+        self.gauss_seidel_inicial_entries = []
+        self.construir_matriz_gauss_seidel(3)
+
+        actions = tk.Frame(tarjeta_matriz.contenido, bg=BG_CARD)
+        actions.pack(fill=tk.X, pady=(4, 0))
+        BotonPrimario(
+            actions, text="⚡ RESOLVER SISTEMA",
+            command=self.controlador.resolver_gauss_seidel,
+            font=FONT_SMALL_BOLD,
+        ).pack(side=tk.LEFT, padx=(0, 6))
+        BotonSecundario(
+            actions, text="📈 Graficar Convergencia",
+            command=self.controlador.graficar_gauss_seidel,
+            font=FONT_SMALL_BOLD,
+        ).pack(side=tk.LEFT, padx=6)
+        BotonSecundario(
+            actions, text="🔬 Diagnóstico de Convergencia",
+            command=self.controlador.analizar_convergencia_gauss_seidel,
+            font=FONT_SMALL_BOLD,
+        ).pack(side=tk.LEFT, padx=6)
+        BotonSecundario(
+            actions, text="🧹 Limpiar",
+            command=self.controlador.limpiar_gauss_seidel,
+            font=FONT_SMALL_BOLD,
+        ).pack(side=tk.LEFT, padx=6)
+        BotonSecundario(
+            actions, text="★ Ejemplo del Profesor",
+            command=self.controlador.cargar_ejemplo_gauss_seidel,
+            font=FONT_SMALL_BOLD,
+        ).pack(side=tk.LEFT, padx=6)
+
+        summary = tk.Frame(parent, bg=BG_WINDOW)
+        summary.pack(fill=tk.X, pady=(0, 8))
+        self.gauss_seidel_aproximacion = self._biseccion_metric(
+            summary, "Vector aproximado", "—", ACCENT_PRIMARY,
+        )
+        self.gauss_seidel_error_final = self._biseccion_metric(
+            summary, "Residuo final ||Ax−b||∞", "—", TEXT_PRIMARY,
+        )
+        self.gauss_seidel_iteraciones_total = self._biseccion_metric(
+            summary, "Iteraciones", "—", TEXT_PRIMARY,
+        )
+        self.gauss_seidel_condicion = self._biseccion_metric(
+            summary, "Dominancia diagonal", "Pendiente", TEXT_MUTED,
+        )
+        self.gauss_seidel_estado = self._biseccion_metric(
+            summary, "Estado", "Esperando datos", TEXT_MUTED,
+        )
+
+        work = tk.Frame(parent, bg=BG_WINDOW)
+        work.pack(fill=tk.BOTH, expand=True, pady=(0, 8))
+        grafica = Tarjeta(
+            work, titulo="Gráfica Interactiva",
+            subtitulo="Arrastra para recorrer · Rueda para zoom · Doble clic para restablecer",
+        )
+        grafica.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 6))
+        self.gauss_seidel_canvas = tk.Canvas(
+            grafica.contenido, height=220, bg=BG_CARD,
+            highlightthickness=0, bd=0,
+        )
+        self.gauss_seidel_canvas.pack(fill=tk.BOTH, expand=True)
+        self._resultado_gauss_seidel = None
+        self._iteracion_seleccionada_gauss_seidel = None
+        self._zoom_gauss_seidel = 1.0
+        self._desplazamiento_x_gauss_seidel = 0.0
+        self._desplazamiento_y_gauss_seidel = 0.0
+        self._escala_x_pan_gauss_seidel = 1.0
+        self._escala_y_pan_gauss_seidel = 1.0
+        self._inicio_pan_gauss_seidel = None
+
+        detalle = Tarjeta(
+            work, titulo="Lectura del Procedimiento",
+            subtitulo="Selecciona una iteración para consultar sustituciones y errores",
+        )
+        detalle.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(6, 0))
+        self.gauss_seidel_selector = ttk.Combobox(
+            detalle.contenido, state="readonly", width=24,
+        )
+        self.gauss_seidel_selector.pack(anchor="w", pady=(0, 6))
+        self.gauss_seidel_selector.bind(
+            "<<ComboboxSelected>>", self._seleccionar_iteracion_gauss_seidel,
+        )
+        self.gauss_seidel_explicacion = tk.Label(
+            detalle.contenido,
+            text="Ingresa A, b y x⁽⁰⁾ para comenzar.",
+            font=(FONT_MONO[0], FONT_MONO[1] + 1),
+            bg=BG_CARD, fg=TEXT_PRIMARY,
+            justify=tk.LEFT, anchor="nw", wraplength=560,
+        )
+        self.gauss_seidel_explicacion.pack(fill=tk.BOTH, expand=True)
+
+        tabla_tarjeta = Tarjeta(
+            parent, titulo="Tabla de Iteraciones",
+            subtitulo="Aproximaciones sucesivas y normas de error y residuo",
+        )
+        tabla_tarjeta.pack(fill=tk.BOTH, expand=True)
+        frame_tabla = tk.Frame(tabla_tarjeta.contenido, bg=BG_CARD)
+        frame_tabla.pack(fill=tk.BOTH, expand=True)
+        frame_tabla.grid_rowconfigure(0, weight=1)
+        frame_tabla.grid_columnconfigure(0, weight=1)
+        columnas = ("i", "vector_anterior", "vector", "diferencia", "residuo")
+        self.gauss_seidel_tabla = ttk.Treeview(
+            frame_tabla, columns=columnas, show="headings",
+            height=7, selectmode="browse",
+        )
+        encabezados = {
+            "i": ("i", 45),
+            "vector_anterior": ("x⁽ᵏ⁻¹⁾", 190),
+            "vector": ("x⁽ᵏ⁾", 190),
+            "diferencia": ("||x⁽ᵏ⁾−x⁽ᵏ⁻¹⁾||∞", 145),
+            "residuo": ("||Ax⁽ᵏ⁾−b||∞", 145),
+        }
+        for columna, (titulo, ancho) in encabezados.items():
+            self.gauss_seidel_tabla.heading(columna, text=titulo)
+            self.gauss_seidel_tabla.column(
+                columna, width=ancho, minwidth=ancho, anchor=tk.CENTER,
+                stretch=columna != "i",
+            )
+        self.gauss_seidel_tabla.tag_configure(
+            "ultima", background=ACCENT_SOFT, foreground=ACCENT_PRIMARY,
+        )
+        self.gauss_seidel_tabla.grid(row=0, column=0, sticky="nsew")
+        scroll_y = ttk.Scrollbar(
+            frame_tabla, orient="vertical", command=self.gauss_seidel_tabla.yview,
+        )
+        scroll_x = ttk.Scrollbar(
+            frame_tabla, orient="horizontal", command=self.gauss_seidel_tabla.xview,
+        )
+        self.gauss_seidel_tabla.configure(
+            yscrollcommand=scroll_y.set, xscrollcommand=scroll_x.set,
+        )
+        scroll_y.grid(row=0, column=1, sticky="ns")
+        scroll_x.grid(row=1, column=0, sticky="ew")
+        self.gauss_seidel_tabla.bind(
+            "<<TreeviewSelect>>", self._seleccionar_fila_gauss_seidel,
+        )
+        self.gauss_seidel_canvas.bind(
+            "<Configure>", lambda _event: self._dibujar_grafica_gauss_seidel(),
+        )
+        self.gauss_seidel_canvas.bind("<MouseWheel>", self._zoom_grafica_gauss_seidel)
+        self.gauss_seidel_canvas.bind(
+            "<Double-Button-1>", self._reset_zoom_gauss_seidel,
+        )
+        self.gauss_seidel_canvas.bind(
+            "<ButtonPress-1>", self._iniciar_pan_grafica_gauss_seidel,
+        )
+        self.gauss_seidel_canvas.bind(
+            "<B1-Motion>", self._mover_pan_grafica_gauss_seidel,
+        )
+        self.gauss_seidel_canvas.bind(
+            "<ButtonRelease-1>", self._terminar_pan_grafica_gauss_seidel,
+        )
+        self._dibujar_grafica_gauss_seidel()
+
+    def construir_matriz_gauss_seidel(self, n):
+        matriz_anterior = [
+            [entrada.get() for entrada in fila]
+            for fila in getattr(self, "gauss_seidel_matriz_entries", [])
+        ]
+        vector_anterior = [
+            entrada.get() for entrada in getattr(self, "gauss_seidel_vector_entries", [])
+        ]
+        inicial_anterior = [
+            entrada.get() for entrada in getattr(self, "gauss_seidel_inicial_entries", [])
+        ]
+        contenedor = self.scroll_matriz_gauss_seidel.scrollable_frame
+        for widget in contenedor.winfo_children():
+            widget.destroy()
+        self.gauss_seidel_matriz_entries = []
+        self.gauss_seidel_vector_entries = []
+        self.gauss_seidel_inicial_entries = []
+
+        for j in range(n):
+            tk.Label(
+                contenedor, text=f"x{j + 1}", font=FONT_SMALL_BOLD,
+                bg=BG_CARD, fg=TEXT_SECONDARY,
+            ).grid(row=0, column=j + 1, padx=3, pady=(0, 6))
+        tk.Label(
+            contenedor, text="│", font=FONT_MONO_BOLD,
+            bg=BG_CARD, fg=ACCENT_PRIMARY,
+        ).grid(row=0, column=n + 1, padx=4)
+        tk.Label(
+            contenedor, text="b", font=FONT_SMALL_BOLD,
+            bg=ACCENT_SOFT, fg=ACCENT_PRIMARY, padx=8,
+        ).grid(row=0, column=n + 2, padx=3, pady=(0, 6))
+
+        for i in range(n):
+            tk.Label(
+                contenedor, text=f"E{i + 1}", font=FONT_MICRO,
+                bg=BG_CARD, fg=TEXT_MUTED,
+            ).grid(row=i + 1, column=0, padx=(0, 6))
+            fila = []
+            for j in range(n):
+                valor = (
+                    matriz_anterior[i][j]
+                    if i < len(matriz_anterior) and j < len(matriz_anterior[i])
+                    else "0"
+                )
+                celda = CeldaMatriz(contenedor, valor_inicial=valor, es_columna_b=False)
+                celda.grid(row=i + 1, column=j + 1, padx=2, pady=2)
+                fila.append(celda)
+            self.gauss_seidel_matriz_entries.append(fila)
+            tk.Label(
+                contenedor, text="│", font=FONT_MONO_BOLD,
+                bg=BG_CARD, fg=ACCENT_PRIMARY,
+            ).grid(row=i + 1, column=n + 1, padx=4)
+            valor_b = vector_anterior[i] if i < len(vector_anterior) else "0"
+            celda_b = CeldaMatriz(contenedor, valor_inicial=valor_b, es_columna_b=True)
+            celda_b.grid(row=i + 1, column=n + 2, padx=2, pady=2)
+            self.gauss_seidel_vector_entries.append(celda_b)
+
+        tk.Label(
+            contenedor, text="x⁽⁰⁾", font=FONT_SMALL_BOLD,
+            bg=BG_CARD, fg=ACCENT_PRIMARY,
+        ).grid(row=n + 1, column=0, padx=(0, 6), pady=(8, 0))
+        for j in range(n):
+            valor = inicial_anterior[j] if j < len(inicial_anterior) else "0"
+            entrada = CeldaMatriz(contenedor, valor_inicial=valor)
+            entrada.grid(row=n + 1, column=j + 1, padx=2, pady=(8, 0))
+            self.gauss_seidel_inicial_entries.append(entrada)
+        self.scroll_matriz_gauss_seidel.observar_contenido()
+
+    def construir_matriz_jacobi(self, n):
+        matriz_anterior = [
+            [entrada.get() for entrada in fila]
+            for fila in getattr(self, "jacobi_matriz_entries", [])
+        ]
+        vector_anterior = [
+            entrada.get() for entrada in getattr(self, "jacobi_vector_entries", [])
+        ]
+        inicial_anterior = [
+            entrada.get() for entrada in getattr(self, "jacobi_inicial_entries", [])
+        ]
+
+        contenedor = self.scroll_matriz_jacobi.scrollable_frame
+        for widget in contenedor.winfo_children():
+            widget.destroy()
+
+        self.jacobi_matriz_entries = []
+        self.jacobi_vector_entries = []
+        self.jacobi_inicial_entries = []
+        for j in range(n):
+            tk.Label(
+                contenedor, text=f"x{j + 1}", font=FONT_SMALL_BOLD,
+                bg=BG_CARD, fg=TEXT_SECONDARY,
+            ).grid(row=0, column=j + 1, padx=3, pady=(0, 6))
+        tk.Label(
+            contenedor, text="│", font=FONT_MONO_BOLD,
+            bg=BG_CARD, fg=ACCENT_PRIMARY,
+        ).grid(row=0, column=n + 1, padx=4)
+        tk.Label(
+            contenedor, text="b", font=FONT_SMALL_BOLD,
+            bg=ACCENT_SOFT, fg=ACCENT_PRIMARY, padx=8,
+        ).grid(row=0, column=n + 2, padx=3, pady=(0, 6))
+
+        for i in range(n):
+            tk.Label(
+                contenedor, text=f"E{i + 1}", font=FONT_MICRO,
+                bg=BG_CARD, fg=TEXT_MUTED,
+            ).grid(row=i + 1, column=0, padx=(0, 6))
+            fila = []
+            for j in range(n):
+                valor = (
+                    matriz_anterior[i][j]
+                    if i < len(matriz_anterior) and j < len(matriz_anterior[i])
+                    else "0"
+                )
+                celda = CeldaMatriz(
+                    contenedor, valor_inicial=valor, es_columna_b=False,
+                )
+                celda.grid(row=i + 1, column=j + 1, padx=2, pady=2)
+                fila.append(celda)
+            self.jacobi_matriz_entries.append(fila)
+
+            tk.Label(
+                contenedor, text="│", font=FONT_MONO_BOLD,
+                bg=BG_CARD, fg=ACCENT_PRIMARY,
+            ).grid(row=i + 1, column=n + 1, padx=4)
+            valor_b = vector_anterior[i] if i < len(vector_anterior) else "0"
+            celda_b = CeldaMatriz(
+                contenedor, valor_inicial=valor_b, es_columna_b=True,
+            )
+            celda_b.grid(row=i + 1, column=n + 2, padx=2, pady=2)
+            self.jacobi_vector_entries.append(celda_b)
+
+        tk.Label(
+            contenedor, text="x⁽⁰⁾", font=FONT_SMALL_BOLD,
+            bg=BG_CARD, fg=ACCENT_PRIMARY,
+        ).grid(row=n + 1, column=0, padx=(0, 6), pady=(8, 0))
+        for j in range(n):
+            valor = inicial_anterior[j] if j < len(inicial_anterior) else "0"
+            entrada = CeldaMatriz(contenedor, valor_inicial=valor)
+            entrada.grid(row=n + 1, column=j + 1, padx=2, pady=(8, 0))
+            self.jacobi_inicial_entries.append(entrada)
+
+        self.scroll_matriz_jacobi.observar_contenido()
+
+    def mostrar_resultado_gauss_seidel(self, solucionador):
+        self._resultado_gauss_seidel = solucionador
+        self._iteracion_seleccionada_gauss_seidel = None
+        self._zoom_gauss_seidel = 1.0
+        self._desplazamiento_x_gauss_seidel = 0.0
+        self._desplazamiento_y_gauss_seidel = 0.0
+        iteraciones = solucionador.iteraciones
+        aproximacion = (
+            solucionador.solucion
+            if solucionador.es_valido
+            else (iteraciones[-1].vector if iteraciones else ())
+        )
+        self.gauss_seidel_aproximacion.config(
+            text="[" + ", ".join(f"{float(valor):.6g}" for valor in aproximacion) + "]"
+            if aproximacion else "—",
+        )
+        self.gauss_seidel_error_final.config(
+            text=f"{iteraciones[-1].residuo:.6g}" if iteraciones else "—",
+        )
+        self.gauss_seidel_iteraciones_total.config(text=str(len(iteraciones)))
+        self.gauss_seidel_condicion.config(
+            text=(
+                "Garantizada" if solucionador.diagonalmente_dominante
+                else "No garantizada"
+                if solucionador.diagonalmente_dominante is False
+                else "No evaluable"
+            ),
+            fg=(
+                SUCCESS_TEXT if solucionador.diagonalmente_dominante
+                else WARNING_TEXT
+                if solucionador.diagonalmente_dominante is False
+                else TEXT_MUTED
+            ),
+        )
+        self.gauss_seidel_estado.config(
+            text="CONVERGIÓ" if solucionador.es_valido else "NO CONVERGIÓ",
+            fg=SUCCESS_TEXT if solucionador.es_valido else ERROR_TEXT,
+        )
+        for item in self.gauss_seidel_tabla.get_children():
+            self.gauss_seidel_tabla.delete(item)
+        for indice, fila in enumerate(iteraciones):
+            anterior = "[" + ", ".join(f"{valor:.7g}" for valor in fila.vector_anterior) + "]"
+            actual = "[" + ", ".join(f"{valor:.7g}" for valor in fila.vector) + "]"
+            self.gauss_seidel_tabla.insert(
+                "", tk.END, iid=str(indice),
+                values=(
+                    fila.numero, anterior, actual,
+                    f"{fila.diferencia:.6g}", f"{fila.residuo:.6g}",
+                ),
+                tags=("ultima",) if indice == len(iteraciones) - 1 else (),
+            )
+        self.gauss_seidel_selector["values"] = tuple(
+            f"Iteración {fila.numero}" for fila in iteraciones
+        )
+        if iteraciones:
+            indice = len(iteraciones) - 1
+            self.gauss_seidel_selector.current(indice)
+            self.gauss_seidel_tabla.selection_set(str(indice))
+            self.gauss_seidel_tabla.see(str(indice))
+            self._mostrar_iteracion_gauss_seidel(indice)
+        else:
+            self.gauss_seidel_selector.set("")
+            self.gauss_seidel_explicacion.config(text=solucionador.clasificacion)
+        self.root.update_idletasks()
+        self._dibujar_grafica_gauss_seidel()
+
+    def actualizar_diagnostico_gauss_seidel(self, tipo):
+        configuracion = {
+            "success": ("Cumple q < 1", SUCCESS_TEXT),
+            "warning": ("No garantizada", WARNING_TEXT),
+        }
+        texto, color = configuracion[tipo]
+        self.gauss_seidel_condicion.config(text=texto, fg=color)
+
+    def _seleccionar_iteracion_gauss_seidel(self, _event=None):
+        seleccion = self.gauss_seidel_selector.get()
+        match = re.search(r"Iteración\s+(\d+)", seleccion)
+        if match and self._resultado_gauss_seidel:
+            indice = int(match.group(1)) - 1
+            if 0 <= indice < len(self._resultado_gauss_seidel.iteraciones):
+                self.gauss_seidel_tabla.selection_set(str(indice))
+                self.gauss_seidel_tabla.see(str(indice))
+                self._mostrar_iteracion_gauss_seidel(indice)
+                self._dibujar_grafica_gauss_seidel()
+
+    def _seleccionar_fila_gauss_seidel(self, _event=None):
+        seleccion = self.gauss_seidel_tabla.selection()
+        if seleccion and self._resultado_gauss_seidel:
+            indice = int(seleccion[0])
+            self.gauss_seidel_selector.current(indice)
+            self._mostrar_iteracion_gauss_seidel(indice)
+            self._dibujar_grafica_gauss_seidel()
+
+    def _mostrar_iteracion_gauss_seidel(self, indice):
+        if not self._resultado_gauss_seidel or not self._resultado_gauss_seidel.iteraciones:
+            return
+        fila = self._resultado_gauss_seidel.iteraciones[indice]
+        A = self._resultado_gauss_seidel.A_original
+        b = self._resultado_gauss_seidel.b_original
+        lineas = [
+            f"Método de Gauss-Seidel · Iteración {fila.numero}",
+            "x⁽ᵏ⁾ usa valores recién calculados en la misma iteración.",
+            f"x⁽ᵏ⁻¹⁾ = [{', '.join(f'{valor:.8g}' for valor in fila.vector_anterior)}]",
+            "Cálculo componente a componente:",
+        ]
+        x_actual = list(fila.vector_anterior)
+        for i, valor in enumerate(fila.vector):
+            terminos = []
+            for j in range(len(fila.vector)):
+                if j != i:
+                    terminos.append(
+                        f"({A[i][j]})({x_actual[j]:.6g})"
+                        if j < i else
+                        f"({A[i][j]})({fila.vector_anterior[j]:.6g})"
+                    )
+            lineas.append(
+                f"x{i + 1}⁽ᵏ⁾ = ({b[i]} − [{' + '.join(terminos) or '0'}]) / "
+                f"{A[i][i]} = {valor:.10g}"
+            )
+            x_actual[i] = valor
+        lineas.extend((
+            f"||x⁽ᵏ⁾ − x⁽ᵏ⁻¹⁾||∞ = {fila.diferencia:.6g}",
+            f"||A·x⁽ᵏ⁾ − b||∞ = {fila.residuo:.6g}",
+            f"Tolerancia = {self._resultado_gauss_seidel.tolerancia:g}",
+        ))
+        self.gauss_seidel_explicacion.config(text="\n".join(lineas))
+        self._iteracion_seleccionada_gauss_seidel = fila
+
+    def limpiar_gauss_seidel(self):
+        for fila in self.gauss_seidel_matriz_entries:
+            for entrada in fila:
+                entrada.delete(0, tk.END)
+                entrada.insert(0, "0")
+        for entradas in (
+            self.gauss_seidel_vector_entries, self.gauss_seidel_inicial_entries,
+        ):
+            for entrada in entradas:
+                entrada.delete(0, tk.END)
+                entrada.insert(0, "0")
+        self.gauss_seidel_tolerancia.delete(0, tk.END)
+        self.gauss_seidel_tolerancia.insert(0, "1e-10")
+        self.gauss_seidel_max_iter.set(100)
+        self._resultado_gauss_seidel = None
+        self._iteracion_seleccionada_gauss_seidel = None
+        self._zoom_gauss_seidel = 1.0
+        self._desplazamiento_x_gauss_seidel = 0.0
+        self._desplazamiento_y_gauss_seidel = 0.0
+        self.gauss_seidel_aproximacion.config(text="—")
+        self.gauss_seidel_error_final.config(text="—")
+        self.gauss_seidel_iteraciones_total.config(text="—")
+        self.gauss_seidel_condicion.config(text="Pendiente", fg=TEXT_MUTED)
+        self.gauss_seidel_estado.config(text="Esperando datos", fg=TEXT_MUTED)
+        self.gauss_seidel_selector["values"] = ()
+        self.gauss_seidel_selector.set("")
+        self.gauss_seidel_explicacion.config(text="Ingresa A, b y x⁽⁰⁾ para comenzar.")
+        for item in self.gauss_seidel_tabla.get_children():
+            self.gauss_seidel_tabla.delete(item)
+        self._dibujar_grafica_gauss_seidel()
+
+    def mostrar_resultado_jacobi(self, solucionador):
+        self._resultado_jacobi = solucionador
+        self._iteracion_seleccionada_jacobi = None
+        self._zoom_jacobi = 1.0
+        self._desplazamiento_x_jacobi = 0.0
+        self._desplazamiento_y_jacobi = 0.0
+
+        iteraciones = solucionador.iteraciones
+        aproximacion = (
+            solucionador.solucion
+            if solucionador.es_valido
+            else (iteraciones[-1].vector if iteraciones else ())
+        )
+        self.jacobi_aproximacion.config(
+            text="[" + ", ".join(f"{float(valor):.6g}" for valor in aproximacion) + "]"
+            if aproximacion else "—",
+        )
+        self.jacobi_error_final.config(
+            text=f"{iteraciones[-1].residuo:.6g}" if iteraciones else "—",
+        )
+        self.jacobi_iteraciones_total.config(text=str(len(iteraciones)))
+        self.jacobi_condicion.config(
+            text=(
+                "Garantizada"
+                if solucionador.diagonalmente_dominante
+                else "No garantizada"
+                if solucionador.diagonalmente_dominante is False
+                else "No evaluable"
+            ),
+            fg=(
+                SUCCESS_TEXT
+                if solucionador.diagonalmente_dominante
+                else WARNING_TEXT
+                if solucionador.diagonalmente_dominante is False
+                else TEXT_MUTED
+            ),
+        )
+        self.jacobi_estado.config(
+            text="CONVERGIÓ" if solucionador.es_valido else "NO CONVERGIÓ",
+            fg=SUCCESS_TEXT if solucionador.es_valido else ERROR_TEXT,
+        )
+
+        for item in self.jacobi_tabla.get_children():
+            self.jacobi_tabla.delete(item)
+        for indice, fila in enumerate(iteraciones):
+            anterior = "[" + ", ".join(f"{valor:.7g}" for valor in fila.vector_anterior) + "]"
+            actual = "[" + ", ".join(f"{valor:.7g}" for valor in fila.vector) + "]"
+            self.jacobi_tabla.insert(
+                "", tk.END, iid=str(indice),
+                values=(
+                    fila.numero, anterior, actual,
+                    f"{fila.diferencia:.6g}", f"{fila.residuo:.6g}",
+                ),
+                tags=("ultima",) if indice == len(iteraciones) - 1 else (),
+            )
+        self.jacobi_selector["values"] = tuple(
+            f"Iteración {fila.numero}" for fila in iteraciones
+        )
+        if iteraciones:
+            indice = len(iteraciones) - 1
+            self.jacobi_selector.current(indice)
+            self.jacobi_tabla.selection_set(str(indice))
+            self.jacobi_tabla.see(str(indice))
+            self._mostrar_iteracion_jacobi(indice)
+        else:
+            self.jacobi_selector.set("")
+            self.jacobi_explicacion.config(text=solucionador.clasificacion)
+        self._dibujar_grafica_jacobi()
+        self._ops()
+
+    def _iniciar_pan_grafica_gauss_seidel(self, event):
+        self._inicio_pan_gauss_seidel = (
+            event.x, event.y,
+            self._desplazamiento_x_gauss_seidel,
+            self._desplazamiento_y_gauss_seidel,
+        )
+        self.gauss_seidel_canvas.configure(cursor="fleur")
+
+    def _mover_pan_grafica_gauss_seidel(self, event):
+        if self._inicio_pan_gauss_seidel is None:
+            return
+        x_inicio, y_inicio, pan_x, pan_y = self._inicio_pan_gauss_seidel
+        ancho = max(1, self.gauss_seidel_canvas.winfo_width() - 72)
+        alto = max(1, self.gauss_seidel_canvas.winfo_height() - 56)
+        self._desplazamiento_x_gauss_seidel = (
+            pan_x - (event.x - x_inicio) * 10.0 / ancho
+        )
+        self._desplazamiento_y_gauss_seidel = (
+            pan_y + (event.y - y_inicio) * 10.0 / alto
+        )
+        self._dibujar_grafica_gauss_seidel()
+
+    def _terminar_pan_grafica_gauss_seidel(self, _event=None):
+        self._inicio_pan_gauss_seidel = None
+        self.gauss_seidel_canvas.configure(cursor="")
+
+    def _zoom_grafica_gauss_seidel(self, event):
+        if event.num == 4 or (hasattr(event, "delta") and event.delta > 0):
+            factor = 1.2
+        elif event.num == 5 or (hasattr(event, "delta") and event.delta < 0):
+            factor = 1.0 / 1.2
+        else:
+            return "break"
+        nuevo_zoom = self._zoom_gauss_seidel * factor
+        if 0.001 <= nuevo_zoom <= 1000.0:
+            self._zoom_gauss_seidel = nuevo_zoom
+            self._dibujar_grafica_gauss_seidel()
+        return "break"
+
+    def _reset_zoom_gauss_seidel(self, _event=None):
+        self._zoom_gauss_seidel = 1.0
+        self._desplazamiento_x_gauss_seidel = 0.0
+        self._desplazamiento_y_gauss_seidel = 0.0
+        self._dibujar_grafica_gauss_seidel()
+        return "break"
+
+    def _dibujar_grafica_gauss_seidel(self):
+        canvas = getattr(self, "gauss_seidel_canvas", None)
+        if canvas is None:
+            return
+        canvas.delete("all")
+        width, height = canvas.winfo_width(), canvas.winfo_height()
+        if width < 80 or height < 80:
+            return
+        left, right, top, bottom = 54, width - 18, 18, height - 38
+        iteraciones = (
+            self._resultado_gauss_seidel.iteraciones
+            if self._resultado_gauss_seidel else ()
+        )
+        puntos = [
+            (fila.numero, math.log10(max(fila.residuo, 1e-16)))
+            for fila in iteraciones
+        ]
+        if puntos:
+            xmin, xmax = puntos[0][0], puntos[-1][0]
+            ymin = min(punto[1] for punto in puntos)
+            ymax = max(punto[1] for punto in puntos)
+        else:
+            xmin, xmax, ymin, ymax = 0.0, 5.0, -12.0, 1.0
+            canvas.create_text(
+                (left + right) / 2, (top + bottom) / 2,
+                text="Resuelve el sistema para graficar la convergencia",
+                fill=TEXT_MUTED, font=FONT_SMALL,
+            )
+        if xmin == xmax:
+            xmin, xmax = xmin - 0.5, xmax + 0.5
+        if ymin == ymax:
+            ymin, ymax = ymin - 1.0, ymax + 1.0
+        centro_x = (xmin + xmax) / 2.0
+        rango_x = (xmax - xmin) * 1.7 / self._zoom_gauss_seidel
+        xmin = centro_x - rango_x / 2.0 + self._desplazamiento_x_gauss_seidel
+        xmax = centro_x + rango_x / 2.0 + self._desplazamiento_x_gauss_seidel
+        centro_y = (ymin + ymax) / 2.0
+        rango_y = (ymax - ymin) * 1.7 / self._zoom_gauss_seidel
+        ymin = centro_y - rango_y / 2.0 - self._desplazamiento_y_gauss_seidel
+        ymax = centro_y + rango_y / 2.0 - self._desplazamiento_y_gauss_seidel
+        to_x = lambda x: left + (x - xmin) / (xmax - xmin) * (right - left)
+        to_y = lambda y: bottom - (y - ymin) / (ymax - ymin) * (bottom - top)
+        for marca in range(5):
+            x = xmin + (xmax - xmin) * marca / 4
+            y = ymin + (ymax - ymin) * marca / 4
+            canvas.create_line(to_x(x), top, to_x(x), bottom, fill=BORDER_SUBTLE)
+            canvas.create_line(left, to_y(y), right, to_y(y), fill=BORDER_SUBTLE)
+            canvas.create_text(
+                to_x(x), bottom + 15, text=f"{x:.4g}",
+                fill=TEXT_MUTED, font=FONT_SMALL,
+            )
+            canvas.create_text(
+                left - 8, to_y(y), text=f"{y:.4g}",
+                fill=TEXT_MUTED, font=FONT_SMALL, anchor="e",
+            )
+        canvas.create_rectangle(left, top, right, bottom, outline=TEXT_MUTED)
+        canvas.create_text(
+            (left + right) / 2, height - 5,
+            text="Iteración", fill=TEXT_SECONDARY, font=FONT_MICRO,
+        )
+        if len(puntos) > 1:
+            coordenadas = [
+                coordenada
+                for x, y in puntos
+                for coordenada in (to_x(x), to_y(y))
+            ]
+            canvas.create_line(
+                *coordenadas, fill=ACCENT_PRIMARY, width=2,
+                tags=("residual_trace",),
+            )
+        for x, y in puntos:
+            seleccionado = (
+                self._iteracion_seleccionada_gauss_seidel
+                and self._iteracion_seleccionada_gauss_seidel.numero == x
+            )
+            color = SUCCESS_TEXT if seleccionado else ACCENT_PRIMARY
+            radio = 4 if seleccionado else 2
+            canvas.create_oval(
+                to_x(x) - radio, to_y(y) - radio,
+                to_x(x) + radio, to_y(y) + radio,
+                fill=color, outline=BG_CARD,
+            )
+
+    def actualizar_diagnostico_jacobi(self, tipo):
+        configuracion = {
+            "success": ("Cumple q < 1", SUCCESS_TEXT),
+            "warning": ("No garantizada", WARNING_TEXT),
+        }
+        texto, color = configuracion[tipo]
+        self.jacobi_condicion.config(text=texto, fg=color)
+
+    def mostrar_informacion(self, titulo, mensaje):
+        messagebox.showinfo(titulo, mensaje, parent=self.root)
+
+    def _zoom_grafica_jacobi(self, event):
+        if event.num == 4 or (hasattr(event, "delta") and event.delta > 0):
+            factor = 1.2
+        elif event.num == 5 or (hasattr(event, "delta") and event.delta < 0):
+            factor = 1.0 / 1.2
+        else:
+            return "break"
+        nuevo_zoom = self._zoom_jacobi * factor
+        if 0.001 <= nuevo_zoom <= 1000.0:
+            self._zoom_jacobi = nuevo_zoom
+            self._dibujar_grafica_jacobi()
+        return "break"
+
+    def _iniciar_pan_grafica_jacobi(self, event):
+        self._inicio_pan_jacobi = (
+            event.x, event.y, self._desplazamiento_x_jacobi,
+            self._desplazamiento_y_jacobi,
+        )
+        self.jacobi_canvas.configure(cursor="fleur")
+
+    def _mover_pan_grafica_jacobi(self, event):
+        if self._inicio_pan_jacobi is None:
+            return
+        x_inicio, y_inicio, pan_x, pan_y = self._inicio_pan_jacobi
+        ancho = max(1, self.jacobi_canvas.winfo_width() - 72)
+        alto = max(1, self.jacobi_canvas.winfo_height() - 56)
+        self._desplazamiento_x_jacobi = (
+            pan_x - (event.x - x_inicio) * self._escala_x_pan_jacobi / ancho
+        )
+        self._desplazamiento_y_jacobi = (
+            pan_y + (event.y - y_inicio) * self._escala_y_pan_jacobi / alto
+        )
+        self._dibujar_grafica_jacobi()
+
+    def _terminar_pan_grafica_jacobi(self, _event=None):
+        self._inicio_pan_jacobi = None
+        self.jacobi_canvas.configure(cursor="")
+
+    def _reset_zoom_jacobi(self, _event=None):
+        self._zoom_jacobi = 1.0
+        self._desplazamiento_x_jacobi = 0.0
+        self._desplazamiento_y_jacobi = 0.0
+        self._dibujar_grafica_jacobi()
+        return "break"
+
+    def _dibujar_grafica_jacobi(self):
+        canvas = getattr(self, "jacobi_canvas", None)
+        if canvas is None:
+            return
+        canvas.delete("all")
+        width, height = canvas.winfo_width(), canvas.winfo_height()
+        if width < 80 or height < 80:
+            return
+        left, right, top, bottom = 54, width - 18, 18, height - 38
+        iteraciones = (
+            self._resultado_jacobi.iteraciones
+            if self._resultado_jacobi else ()
+        )
+        puntos = [
+            (fila.numero, math.log10(max(fila.residuo, 1e-16)))
+            for fila in iteraciones
+        ]
+        if puntos:
+            xmin, xmax = puntos[0][0], puntos[-1][0]
+            ymin = min(punto[1] for punto in puntos)
+            ymax = max(punto[1] for punto in puntos)
+        else:
+            xmin, xmax, ymin, ymax = 0.0, 5.0, -12.0, 1.0
+            canvas.create_text(
+                (left + right) / 2, (top + bottom) / 2,
+                text="Resuelve el sistema para graficar la convergencia",
+                fill=TEXT_MUTED, font=FONT_SMALL,
+            )
+        if xmin == xmax:
+            xmin, xmax = xmin - 0.5, xmax + 0.5
+        if ymin == ymax:
+            ymin, ymax = ymin - 1.0, ymax + 1.0
+        centro_x = (xmin + xmax) / 2.0
+        rango_x = (xmax - xmin) * 1.7 / self._zoom_jacobi
+        xmin = centro_x - rango_x / 2.0 + self._desplazamiento_x_jacobi
+        xmax = centro_x + rango_x / 2.0 + self._desplazamiento_x_jacobi
+        self._escala_x_pan_jacobi = xmax - xmin
+        centro_y = (ymin + ymax) / 2.0
+        rango_y = (ymax - ymin) * 1.7 / self._zoom_jacobi
+        ymin = centro_y - rango_y / 2.0 - self._desplazamiento_y_jacobi
+        ymax = centro_y + rango_y / 2.0 - self._desplazamiento_y_jacobi
+        self._escala_y_pan_jacobi = ymax - ymin
+        to_x = lambda x: left + (x - xmin) / (xmax - xmin) * (right - left)
+        to_y = lambda y: bottom - (y - ymin) / (ymax - ymin) * (bottom - top)
+        for marca in range(5):
+            x = xmin + (xmax - xmin) * marca / 4
+            y = ymin + (ymax - ymin) * marca / 4
+            canvas.create_line(to_x(x), top, to_x(x), bottom, fill=BORDER_SUBTLE)
+            canvas.create_line(left, to_y(y), right, to_y(y), fill=BORDER_SUBTLE)
+            canvas.create_text(
+                to_x(x), bottom + 15, text=f"{x:.4g}",
+                fill=TEXT_MUTED, font=FONT_SMALL,
+            )
+            canvas.create_text(
+                left - 8, to_y(y), text=f"{y:.4g}",
+                fill=TEXT_MUTED, font=FONT_SMALL, anchor="e",
+            )
+        canvas.create_rectangle(left, top, right, bottom, outline=TEXT_MUTED)
+        canvas.create_text(
+            (left + right) / 2, height - 5,
+            text="Iteración", fill=TEXT_SECONDARY, font=FONT_MICRO,
+        )
+        canvas.create_text(
+            12, (top + bottom) / 2, text="log₁₀ ||Ax−b||∞",
+            fill=TEXT_SECONDARY, font=FONT_MICRO, angle=90,
+        )
+        if len(puntos) > 1:
+            coordenadas = [
+                coordenada
+                for x, y in puntos
+                for coordenada in (to_x(x), to_y(y))
+            ]
+            canvas.create_line(
+                *coordenadas, fill=ACCENT_PRIMARY, width=2,
+                tags=("residual_trace",),
+            )
+        for x, y in puntos:
+            seleccionado = (
+                self._iteracion_seleccionada_jacobi
+                and self._iteracion_seleccionada_jacobi.numero == x
+            )
+            color = SUCCESS_TEXT if seleccionado else ACCENT_PRIMARY
+            radio = 4 if seleccionado else 2
+            canvas.create_oval(
+                to_x(x) - radio, to_y(y) - radio,
+                to_x(x) + radio, to_y(y) + radio,
+                fill=color, outline=BG_CARD,
+            )
+
+    def _seleccionar_iteracion_jacobi(self, _event=None):
+        seleccion = self.jacobi_selector.get()
+        match = re.search(r"Iteración\s+(\d+)", seleccion)
+        if match and self._resultado_jacobi:
+            indice = int(match.group(1)) - 1
+            if 0 <= indice < len(self._resultado_jacobi.iteraciones):
+                self._zoom_jacobi = 1.0
+                self._desplazamiento_x_jacobi = 0.0
+                self._desplazamiento_y_jacobi = 0.0
+                self.jacobi_tabla.selection_set(str(indice))
+                self.jacobi_tabla.see(str(indice))
+                self._mostrar_iteracion_jacobi(indice)
+                self._dibujar_grafica_jacobi()
+
+    def _seleccionar_fila_jacobi(self, _event=None):
+        seleccion = self.jacobi_tabla.selection()
+        if seleccion and self._resultado_jacobi:
+            indice = int(seleccion[0])
+            self._zoom_jacobi = 1.0
+            self._desplazamiento_x_jacobi = 0.0
+            self._desplazamiento_y_jacobi = 0.0
+            self.jacobi_selector.current(indice)
+            self._mostrar_iteracion_jacobi(indice)
+            self._dibujar_grafica_jacobi()
+
+    def _mostrar_iteracion_jacobi(self, indice):
+        if not self._resultado_jacobi or not self._resultado_jacobi.iteraciones:
+            return
+        fila = self._resultado_jacobi.iteraciones[indice]
+        A = self._resultado_jacobi.A_original
+        b = self._resultado_jacobi.b_original
+        lineas = [
+            f"Método de Jacobi · Iteración {fila.numero}",
+            "x⁽ᵏ⁾ se calcula usando exclusivamente x⁽ᵏ⁻¹⁾.",
+            f"x⁽ᵏ⁻¹⁾ = [{', '.join(f'{valor:.8g}' for valor in fila.vector_anterior)}]",
+            "Cálculo componente a componente:",
+        ]
+        for i, valor in enumerate(fila.vector):
+            terminos = " + ".join(
+                f"({A[i][j]})({fila.vector_anterior[j]:.6g})"
+                for j in range(len(fila.vector)) if j != i
+            ) or "0"
+            lineas.append(
+                f"x{i + 1}⁽ᵏ⁾ = "
+                f"({b[i]} − [{terminos}]) / {A[i][i]} = {valor:.10g}"
+            )
+        lineas.extend((
+            f"||x⁽ᵏ⁾ − x⁽ᵏ⁻¹⁾||∞ = {fila.diferencia:.6g}",
+            f"||A·x⁽ᵏ⁾ − b||∞ = {fila.residuo:.6g}",
+            f"Tolerancia = {self._resultado_jacobi.tolerancia:g}",
+        ))
+        self.jacobi_explicacion.config(text="\n".join(lineas))
+        self._iteracion_seleccionada_jacobi = fila
+
+    def limpiar_jacobi(self):
+        for fila in self.jacobi_matriz_entries:
+            for entrada in fila:
+                entrada.delete(0, tk.END)
+                entrada.insert(0, "0")
+        for entradas in (self.jacobi_vector_entries, self.jacobi_inicial_entries):
+            for entrada in entradas:
+                entrada.delete(0, tk.END)
+                entrada.insert(0, "0")
+        self.jacobi_tolerancia.delete(0, tk.END)
+        self.jacobi_tolerancia.insert(0, "1e-10")
+        self.jacobi_max_iter.set(100)
+        self._resultado_jacobi = None
+        self._iteracion_seleccionada_jacobi = None
+        self._zoom_jacobi = 1.0
+        self._desplazamiento_x_jacobi = 0.0
+        self._desplazamiento_y_jacobi = 0.0
+        self.jacobi_aproximacion.config(text="—")
+        self.jacobi_error_final.config(text="—")
+        self.jacobi_iteraciones_total.config(text="—")
+        self.jacobi_condicion.config(text="Pendiente", fg=TEXT_MUTED)
+        self.jacobi_estado.config(text="Esperando datos", fg=TEXT_MUTED)
+        self.jacobi_selector["values"] = ()
+        self.jacobi_selector.set("")
+        for item in self.jacobi_tabla.get_children():
+            self.jacobi_tabla.delete(item)
+        self.jacobi_explicacion.config(text="Ingresa A, b y x⁽⁰⁾ para comenzar.")
+        self._dibujar_grafica_jacobi()
+
+    def _obtener_resumen_jacobi_texto(self):
+        iteraciones = self._resultado_jacobi.iteraciones if self._resultado_jacobi else ()
+        tabla = "\n".join(
+            " | ".join(
+                str(valor) for valor in self.jacobi_tabla.item(str(i), "values")
+            )
+            for i in range(len(iteraciones))
+        )
+        return (
+            "MÉTODO DE JACOBI\n"
+            f"Estado: {self.jacobi_estado.cget('text')}\n"
+            f"Aproximación: {self.jacobi_aproximacion.cget('text')}\n"
+            f"Residuo: {self.jacobi_error_final.cget('text')}\n"
+            f"Iteraciones: {self.jacobi_iteraciones_total.cget('text')}\n\n"
+            f"DETALLE\n{self.jacobi_explicacion.cget('text')}\n\n"
+            f"TABLA DE ITERACIONES\n{tabla or '[ Sin iteraciones ]'}"
+        )
 
     def _al_cambiar_dimensiones(self, _val=None):
         try:

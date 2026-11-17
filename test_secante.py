@@ -63,7 +63,9 @@ class PruebasSecante(unittest.TestCase):
             app = Controlador(root)
             vista = app.vista
             root.update()
-            vista.nb_main.select(vista.tab_secante)
+            vista._al_cambiar_modulo(
+                vista.nb_main.index(vista.tab_secante), "Método de la Secante",
+            )
             app.calcular_secante()
             root.update()
 
@@ -73,7 +75,13 @@ class PruebasSecante(unittest.TestCase):
                 len(vista._resultado_secante.iteraciones),
             )
             self.assertIn("xₙ₊₁ =", vista.secante_explicacion.cget("text"))
-            self.assertEqual(vista.nb_main.index("current"), len(vista.modulos) - 1)
+            self.assertEqual(
+                vista.nb_main.index("current"), len(vista.modulos) - 3,
+            )
+            self.assertEqual(
+                vista.modulos[vista.nb_main.index("current") + 1],
+                "Método de Jacobi",
+            )
             self.assertTrue(vista.secante_canvas.bind("<MouseWheel>"))
             self.assertTrue(vista.secante_canvas.find_withtag("function_trace"))
             vista._zoom_grafica_secante(SimpleNamespace(num=0, delta=120))

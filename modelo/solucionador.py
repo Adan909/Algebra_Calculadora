@@ -1,3 +1,5 @@
+import math
+from dataclasses import dataclass
 from fractions import Fraction
 
 from modelo.matriz import copiar_matriz, formatear_fraccion, formatear_matriz
@@ -187,6 +189,304 @@ class SolucionadorGaussJordan(SolucionadorGauss):
                 self.solucion[col] = self.aumentada[fila][-1]
         else:
             self.clasificacion = "Sistema Consistente Indeterminado: Presenta Infinitas Soluciones"
+
+
+@dataclass(frozen=True)
+class IteracionJacobi:
+    numero: int
+    vector_anterior: tuple
+    vector: tuple
+    diferencia: float
+    residuo: float
+
+
+class SolucionadorJacobi(SolucionadorGauss):
+    """Resuelve sistemas cuadrados mediante iteraciones simultáneas de Jacobi."""
+
+    def __init__(
+        self, A, b, tolerancia=1e-10, max_iteraciones=100, aproximacion_inicial=None
+    ):
+        if not A or len(b) != len(A) or any(len(fila) != len(A) for fila in A):
+            raise ValueError(
+                "El método de Jacobi requiere una matriz cuadrada y un vector b del mismo tamaño."
+            )
+        super().__init__(A, b)
+        try:
+            self.tolerancia = float(Fraction(str(tolerancia)))
+        except (TypeError, ValueError, ZeroDivisionError, OverflowError) as error:
+            raise ValueError("La tolerancia debe ser un número real finito positivo.") from error
+        if not math.isfinite(self.tolerancia) or self.tolerancia <= 0:
+            raise ValueError("La tolerancia debe ser un número real finito positivo.")
+        if (
+            isinstance(max_iteraciones, bool)
+            or not isinstance(max_iteraciones, int)
+            or not 1 <= max_iteraciones <= 100000
+        ):
+            raise ValueError("El máximo de iteraciones debe ser un entero entre 1 y 100000.")
+        self.max_iteraciones = max_iteraciones
+        if aproximacion_inicial is None:
+            aproximacion_inicial = [Fraction(0)] * self.n
+        if len(aproximacion_inicial) != self.n:
+            raise ValueError("La aproximación inicial debe tener el mismo tamaño que el sistema.")
+        self.aproximacion_inicial = [
+            Fraction(valor) for valor in aproximacion_inicial
+        ]
+        try:
+            valores_float = [
+                float(valor)
+                for fila in self.A_original
+                for valor in fila
+            ] + [float(valor) for valor in self.b_original]
+            valores_float.extend(float(valor) for valor in self.aproximacion_inicial)
+        except OverflowError as error:
+            raise ValueError(
+                "Los coeficientes y aproximaciones deben poder representarse como números finitos."
+            ) from error
+        if not all(math.isfinite(valor) for valor in valores_float):
+            raise ValueError(
+                "Los coeficientes y aproximaciones deben poder representarse como números finitos."
+            )
+        if any(float(self.A_original[i][i]) == 0 for i in range(self.n)):
+            raise ValueError(
+                "Los elementos de la diagonal deben ser distintos de cero y representables."
+            )
+        self.iteraciones = []
+        self.diagonalmente_dominante = None
+
+    def resolver(self):
+        diagonal_no_nula = all(self.A_original[i][i] != 0 for i in range(self.n))
+        if not diagonal_no_nula:
+            self.clasificacion = (
+                "No se puede aplicar el método de Jacobi: la diagonal principal "
+                "contiene un elemento nulo."
+            )
+            self.historial.append((self.clasificacion, self.clasificacion))
+            return
+
+        self.diagonalmente_dominante = all(
+            abs(self.A_original[i][i])
+            > sum(abs(self.A_original[i][j]) for j in range(self.n) if j != i)
+            for i in range(self.n)
+        )
+        condicion = (
+            "La matriz es estrictamente diagonalmente dominante; esto garantiza "
+            "la convergencia de Jacobi."
+            if self.diagonalmente_dominante
+            else "La matriz no es estrictamente diagonalmente dominante; esta condición "
+            "suficiente de convergencia no se cumple, por lo que se comprobará el "
+            "resultado de cada iteración."
+        )
+        self.historial.append((
+            "Configuración del método de Jacobi",
+            f"{condicion}\n"
+            "Aproximación inicial: x^(0) = ["
+            + ", ".join(formatear_fraccion(valor) for valor in self.aproximacion_inicial)
+            + "]\n"
+            f"Tolerancia: {self.tolerancia:g}; máximo de iteraciones: "
+            f"{self.max_iteraciones}\n"
+            "En cada iteración se calcula cada componente usando únicamente "
+            "los valores de la iteración anterior.",
+        ))
+
+        x_anterior = [float(valor) for valor in self.aproximacion_inicial]
+        norma_b = max((abs(float(valor)) for valor in self.b_original), default=0.0)
+        self.historial.append((
+            "Matriz Aumentada Inicial [ A | b ]:",
+            [fila[:] + [self.b_original[i]] for i, fila in enumerate(self.A_original)],
+        ))
+
+        for iteracion in range(1, self.max_iteraciones + 1):
+            x_actual = []
+            for i in range(self.n):
+                suma = sum(
+                    float(self.A_original[i][j]) * x_anterior[j]
+                    for j in range(self.n) if j != i
+                )
+                x_actual.append(
+                    (float(self.b_original[i]) - suma) / float(self.A_original[i][i])
+                )
+
+            if not all(math.isfinite(valor) for valor in x_actual):
+                self.clasificacion = (
+                    "El método de Jacobi no convergió: se generaron valores no finitos."
+                )
+                self.historial.append((self.clasificacion, self.clasificacion))
+                return
+
+            diferencia = max(
+                abs(x_actual[i] - x_anterior[i]) for i in range(self.n)
+            )
+            residuo = max(
+                abs(
+                    sum(float(self.A_original[i][j]) * x_actual[j] for j in range(self.n))
+                    - float(self.b_original[i])
+                )
+                for i in range(self.n)
+            )
+            if not math.isfinite(diferencia) or not math.isfinite(residuo):
+                self.clasificacion = (
+                    "El método de Jacobi no convergió: el error o residuo dejó de ser finito."
+                )
+                self.historial.append((self.clasificacion, self.clasificacion))
+                return
+
+            fila_iteracion = IteracionJacobi(
+                iteracion, tuple(x_anterior), tuple(x_actual), diferencia, residuo,
+            )
+            self.iteraciones.append(fila_iteracion)
+            escala_x = max(1.0, max(abs(valor) for valor in x_actual))
+            escala_b = max(1.0, norma_b)
+            self.historial.append((
+                f"Iteración {iteracion}",
+                f"x^({iteracion}) = ["
+                + ", ".join(f"{valor:.12g}" for valor in x_actual)
+                + "]\n"
+                f"||x^({iteracion}) - x^({iteracion - 1})||∞ = {diferencia:.6g}\n"
+                f"||A·x^({iteracion}) - b||∞ = {residuo:.6g}",
+            ))
+
+            if (
+                diferencia <= self.tolerancia * escala_x
+                and residuo <= self.tolerancia * escala_b
+            ):
+                self.solucion = [
+                    Fraction(valor).limit_denominator(10**12) for valor in x_actual
+                ]
+                self.clasificacion = (
+                    "Sistema Consistente Determinado: Solución aproximada por "
+                    "Jacobi con convergencia."
+                )
+                self.es_valido = True
+                return
+
+            x_anterior = x_actual
+
+        self.clasificacion = (
+            f"El método de Jacobi no convergió dentro del máximo de "
+            f"{self.max_iteraciones} iteraciones. No se reporta una solución."
+        )
+        self.historial.append((self.clasificacion, self.clasificacion))
+
+
+@dataclass(frozen=True)
+class IteracionGaussSeidel:
+    numero: int
+    vector_anterior: tuple
+    vector: tuple
+    diferencia: float
+    residuo: float
+
+
+class SolucionadorGaussSeidel(SolucionadorJacobi):
+    """Resuelve sistemas cuadrados usando iteraciones sucesivas de Gauss-Seidel."""
+
+    def resolver(self):
+        if not all(self.A_original[i][i] != 0 for i in range(self.n)):
+            self.clasificacion = (
+                "No se puede aplicar el método de Gauss-Seidel: la diagonal principal "
+                "contiene un elemento nulo."
+            )
+            self.historial.append((self.clasificacion, self.clasificacion))
+            return
+
+        self.diagonalmente_dominante = all(
+            abs(self.A_original[i][i])
+            > sum(abs(self.A_original[i][j]) for j in range(self.n) if j != i)
+            for i in range(self.n)
+        )
+        condicion = (
+            "La matriz es estrictamente diagonalmente dominante; esto garantiza "
+            "la convergencia de Gauss-Seidel."
+            if self.diagonalmente_dominante
+            else "La matriz no es estrictamente diagonalmente dominante; esta condición "
+            "suficiente de convergencia no se cumple, por lo que se comprobará el "
+            "resultado de cada iteración."
+        )
+        self.historial.append((
+            "Configuración del método de Gauss-Seidel",
+            f"{condicion}\n"
+            "Aproximación inicial: x^(0) = ["
+            + ", ".join(formatear_fraccion(valor) for valor in self.aproximacion_inicial)
+            + "]\n"
+            f"Tolerancia: {self.tolerancia:g}; máximo de iteraciones: "
+            f"{self.max_iteraciones}\n"
+            "En cada componente se usan inmediatamente los valores recién calculados "
+            "dentro de la iteración actual.",
+        ))
+        self.historial.append((
+            "Matriz Aumentada Inicial [ A | b ]:",
+            [fila[:] + [self.b_original[i]] for i, fila in enumerate(self.A_original)],
+        ))
+
+        x_anterior = [float(valor) for valor in self.aproximacion_inicial]
+        norma_b = max((abs(float(valor)) for valor in self.b_original), default=0.0)
+
+        for numero in range(1, self.max_iteraciones + 1):
+            x_actual = x_anterior[:]
+            for i in range(self.n):
+                suma = sum(
+                    float(self.A_original[i][j]) * x_actual[j]
+                    for j in range(self.n) if j != i
+                )
+                x_actual[i] = (
+                    float(self.b_original[i]) - suma
+                ) / float(self.A_original[i][i])
+
+            if not all(math.isfinite(valor) for valor in x_actual):
+                self.clasificacion = (
+                    "El método de Gauss-Seidel no convergió: se generaron valores no finitos."
+                )
+                self.historial.append((self.clasificacion, self.clasificacion))
+                return
+
+            diferencia = max(
+                abs(x_actual[i] - x_anterior[i]) for i in range(self.n)
+            )
+            residuo = max(
+                abs(
+                    sum(float(self.A_original[i][j]) * x_actual[j] for j in range(self.n))
+                    - float(self.b_original[i])
+                )
+                for i in range(self.n)
+            )
+            if not math.isfinite(diferencia) or not math.isfinite(residuo):
+                self.clasificacion = (
+                    "El método de Gauss-Seidel no convergió: el error o residuo dejó de ser finito."
+                )
+                self.historial.append((self.clasificacion, self.clasificacion))
+                return
+
+            fila = IteracionGaussSeidel(
+                numero, tuple(x_anterior), tuple(x_actual), diferencia, residuo,
+            )
+            self.iteraciones.append(fila)
+            escala_x = max(1.0, max(abs(valor) for valor in x_actual))
+            escala_b = max(1.0, norma_b)
+            self.historial.append((
+                f"Iteración {numero}",
+                f"x^({numero}) = [" + ", ".join(f"{valor:.12g}" for valor in x_actual)
+                + "]\n"
+                f"||x^({numero}) - x^({numero - 1})||∞ = {diferencia:.6g}\n"
+                f"||A·x^({numero}) - b||∞ = {residuo:.6g}",
+            ))
+
+            if diferencia <= self.tolerancia * escala_x and residuo <= self.tolerancia * escala_b:
+                self.solucion = [
+                    Fraction(valor).limit_denominator(10**12) for valor in x_actual
+                ]
+                self.clasificacion = (
+                    "Sistema Consistente Determinado: Solución aproximada por "
+                    "Gauss-Seidel con convergencia."
+                )
+                self.es_valido = True
+                return
+            x_anterior = x_actual
+
+        self.clasificacion = (
+            f"El método de Gauss-Seidel no convergió dentro del máximo de "
+            f"{self.max_iteraciones} iteraciones. No se reporta una solución."
+        )
+        self.historial.append((self.clasificacion, self.clasificacion))
 
 
 def resolver_Ax_b(A, b):

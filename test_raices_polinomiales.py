@@ -48,7 +48,8 @@ class PruebasRaicesPolinomiales(unittest.TestCase):
                     vista.rf_canvas, vista._navegar_raiz_rf,
                 ),
             ):
-                vista.nb_main.select(pestaña)
+                indice = vista.nb_main.index(pestaña)
+                vista._al_cambiar_modulo(indice, vista.modulos[indice])
                 root.update_idletasks()
                 campo.delete(0, tk.END)
                 campo.insert(0, "x^3 - 3*x + 2")

@@ -2,7 +2,13 @@ import math
 from fractions import Fraction
 
 from vista.ventana_principal import VentanaPrincipal
-from modelo.solucionador import SolucionadorGauss, SolucionadorGaussJordan, SolucionadorLU
+from modelo.solucionador import (
+    SolucionadorGauss,
+    SolucionadorGaussJordan,
+    SolucionadorJacobi,
+    SolucionadorGaussSeidel,
+    SolucionadorLU,
+)
 from modelo.biseccion import FuncionMatematica, biseccion, verificar_continuidad, ResultadoContinuidad
 from modelo.regula_falsi import calcular_regula_falsi
 from modelo.newton_raphson import derivar, newton_raphson
@@ -455,7 +461,230 @@ class Controlador:
         else:
             solucionador = SolucionadorGauss(A, b)
         solucionador.resolver()
-        
+
+        self._mostrar_resultado_sistema(
+            solucionador,
+            self.vista.actualizar_resumen,
+            self.vista.actualizar_historial,
+        )
+
+    def resolver_jacobi(self):
+        try:
+            n = self.vista.jacobi_spin_n.get_int()
+            A = [
+                [Fraction(entrada.get()) for entrada in fila]
+                for fila in self.vista.jacobi_matriz_entries
+            ]
+            b = [
+                Fraction(entrada.get())
+                for entrada in self.vista.jacobi_vector_entries
+            ]
+            aproximacion_inicial = [
+                Fraction(entrada.get())
+                for entrada in self.vista.jacobi_inicial_entries
+            ]
+            tolerancia = Fraction(self.vista.jacobi_tolerancia.get())
+            max_iteraciones = self.vista.jacobi_max_iter.get_int()
+        except (ValueError, ZeroDivisionError, OverflowError):
+            self.vista.mostrar_error(
+                "Error de Valor",
+                "Los coeficientes, la aproximación inicial y la tolerancia "
+                "deben ser valores numéricos válidos.",
+            )
+            return
+
+        if (
+            len(A) != n or len(b) != n or len(aproximacion_inicial) != n
+            or any(len(fila) != n for fila in A)
+        ):
+            self.vista.mostrar_error(
+                "Error de Dimensión",
+                "La matriz de Jacobi debe ser cuadrada y los vectores b y x⁽⁰⁾ "
+                "deben tener el mismo orden.",
+            )
+            return
+
+        try:
+            solucionador = SolucionadorJacobi(
+                A, b, tolerancia, max_iteraciones, aproximacion_inicial,
+            )
+        except (ValueError, ZeroDivisionError) as error:
+            self.vista.mostrar_error("Parámetros de Jacobi no válidos", str(error))
+            return
+        solucionador.resolver()
+        self.vista.mostrar_resultado_jacobi(solucionador)
+
+    def graficar_jacobi(self):
+        self.resolver_jacobi()
+
+    def analizar_convergencia_jacobi(self):
+        try:
+            A = [
+                [Fraction(entrada.get()) for entrada in fila]
+                for fila in self.vista.jacobi_matriz_entries
+            ]
+            if not A or any(len(fila) != len(A) for fila in A):
+                raise ValueError("La matriz debe ser cuadrada y no vacía.")
+            if any(A[i][i] == 0 for i in range(len(A))):
+                raise ValueError("La diagonal principal no puede contener ceros.")
+        except ValueError as error:
+            self.vista.mostrar_error("Matriz no válida", str(error))
+            return
+
+        factores = [
+            sum(abs(A[i][j]) for j in range(len(A)) if j != i) / abs(A[i][i])
+            for i in range(len(A))
+        ]
+        q = max(factores, default=0)
+        if q < 1:
+            diagnostico = (
+                "La matriz es estrictamente diagonalmente dominante por filas. "
+                f"q = max Σ|aᵢⱼ|/|aᵢᵢ| = {formatear_fraccion(q)} < 1.\n"
+                "Esta condición suficiente garantiza la convergencia del método de Jacobi."
+            )
+            tipo = "success"
+        else:
+            diagnostico = (
+                "La matriz no satisface la condición suficiente de dominancia diagonal "
+                f"estricta: q = {formatear_fraccion(q)} ≥ 1.\n"
+                "Esto no demuestra que Jacobi diverja; la convergencia se comprobará "
+                "durante las iteraciones."
+            )
+            tipo = "warning"
+        self.vista.actualizar_diagnostico_jacobi(tipo)
+        self.vista.mostrar_informacion("Diagnóstico de convergencia", diagnostico)
+
+    def cargar_ejemplo_jacobi(self):
+        matriz = ((10, -1, 2), (-1, 11, -1), (2, -1, 10))
+        vector = (6, 22, -10)
+        self.vista.jacobi_spin_n.set(3)
+        self.vista.construir_matriz_jacobi(3)
+        for i, fila in enumerate(matriz):
+            for j, valor in enumerate(fila):
+                entrada = self.vista.jacobi_matriz_entries[i][j]
+                entrada.delete(0, "end")
+                entrada.insert(0, str(valor))
+        for entrada, valor in zip(self.vista.jacobi_vector_entries, vector):
+            entrada.delete(0, "end")
+            entrada.insert(0, str(valor))
+        for entrada in self.vista.jacobi_inicial_entries:
+            entrada.delete(0, "end")
+            entrada.insert(0, "0")
+        self.resolver_jacobi()
+
+    def limpiar_jacobi(self):
+        self.vista.limpiar_jacobi()
+
+    def resolver_gauss_seidel(self):
+        try:
+            n = self.vista.gauss_seidel_spin_n.get_int()
+            A = [
+                [Fraction(entrada.get()) for entrada in fila]
+                for fila in self.vista.gauss_seidel_matriz_entries
+            ]
+            b = [
+                Fraction(entrada.get())
+                for entrada in self.vista.gauss_seidel_vector_entries
+            ]
+            aproximacion_inicial = [
+                Fraction(entrada.get())
+                for entrada in self.vista.gauss_seidel_inicial_entries
+            ]
+            tolerancia = Fraction(self.vista.gauss_seidel_tolerancia.get())
+            max_iteraciones = self.vista.gauss_seidel_max_iter.get_int()
+        except (ValueError, ZeroDivisionError, OverflowError):
+            self.vista.mostrar_error(
+                "Error de Valor",
+                "Los coeficientes, la aproximación inicial y la tolerancia "
+                "deben ser valores numéricos válidos.",
+            )
+            return
+
+        if (
+            len(A) != n or len(b) != n or len(aproximacion_inicial) != n
+            or any(len(fila) != n for fila in A)
+        ):
+            self.vista.mostrar_error(
+                "Error de Dimensión",
+                "La matriz de Gauss-Seidel debe ser cuadrada y los vectores b y x⁽⁰⁾ "
+                "deben tener el mismo orden.",
+            )
+            return
+
+        try:
+            solucionador = SolucionadorGaussSeidel(
+                A, b, tolerancia, max_iteraciones, aproximacion_inicial,
+            )
+        except (ValueError, ZeroDivisionError) as error:
+            self.vista.mostrar_error("Parámetros de Gauss-Seidel no válidos", str(error))
+            return
+        solucionador.resolver()
+        self.vista.mostrar_resultado_gauss_seidel(solucionador)
+
+    def graficar_gauss_seidel(self):
+        self.resolver_gauss_seidel()
+
+    def analizar_convergencia_gauss_seidel(self):
+        try:
+            A = [
+                [Fraction(entrada.get()) for entrada in fila]
+                for fila in self.vista.gauss_seidel_matriz_entries
+            ]
+            if not A or any(len(fila) != len(A) for fila in A):
+                raise ValueError("La matriz debe ser cuadrada y no vacía.")
+            if any(A[i][i] == 0 for i in range(len(A))):
+                raise ValueError("La diagonal principal no puede contener ceros.")
+        except ValueError as error:
+            self.vista.mostrar_error("Matriz no válida", str(error))
+            return
+
+        factores = [
+            sum(abs(A[i][j]) for j in range(len(A)) if j != i) / abs(A[i][i])
+            for i in range(len(A))
+        ]
+        q = max(factores, default=0)
+        if q < 1:
+            diagnostico = (
+                "La matriz es estrictamente diagonalmente dominante por filas. "
+                f"q = max Σ|aᵢⱼ|/|aᵢᵢ| = {formatear_fraccion(q)} < 1.\n"
+                "Esta condición suficiente garantiza la convergencia de Gauss-Seidel."
+            )
+            tipo = "success"
+        else:
+            diagnostico = (
+                "La matriz no satisface la condición suficiente de dominancia diagonal "
+                f"estricta: q = {formatear_fraccion(q)} ≥ 1.\n"
+                "Esto no demuestra que Gauss-Seidel diverja; la convergencia se "
+                "comprobará durante las iteraciones."
+            )
+            tipo = "warning"
+        self.vista.actualizar_diagnostico_gauss_seidel(tipo)
+        self.vista.mostrar_informacion("Diagnóstico de convergencia", diagnostico)
+
+    def cargar_ejemplo_gauss_seidel(self):
+        matriz = ((10, -1, 2), (-1, 11, -1), (2, -1, 10))
+        vector = (6, 22, -10)
+        self.vista.gauss_seidel_spin_n.set(3)
+        self.vista.construir_matriz_gauss_seidel(3)
+        for i, fila in enumerate(matriz):
+            for j, valor in enumerate(fila):
+                entrada = self.vista.gauss_seidel_matriz_entries[i][j]
+                entrada.delete(0, "end")
+                entrada.insert(0, str(valor))
+        for entrada, valor in zip(self.vista.gauss_seidel_vector_entries, vector):
+            entrada.delete(0, "end")
+            entrada.insert(0, str(valor))
+        for entrada in self.vista.gauss_seidel_inicial_entries:
+            entrada.delete(0, "end")
+            entrada.insert(0, "0")
+        self.resolver_gauss_seidel()
+
+    def limpiar_gauss_seidel(self):
+        self.vista.limpiar_gauss_seidel()
+
+    def _mostrar_resultado_sistema(
+        self, solucionador, actualizar_resumen, actualizar_historial
+    ):
         clasificacion = solucionador.clasificacion
         texto_sol = ""
         texto_ver = ""
@@ -471,10 +700,14 @@ class Controlador:
                 for i, (calc, orig, err) in enumerate(errores):
                     texto_ver += f"Eq {i+1}: valor calculado = {formatear_fraccion(calc)}, valor original = {formatear_fraccion(orig)} | Error abs: {formatear_fraccion(err)}\n"
         else:
-            texto_sol = "No hay una solución única."
+            texto_sol = (
+                "Jacobi no obtuvo una solución convergente."
+                if "no convergió" in clasificacion.lower()
+                else "No hay una solución única."
+            )
             texto_ver = "Verificación no aplicable."
             
-        self.vista.actualizar_resumen(clasificacion, texto_sol, texto_ver)
+        actualizar_resumen(clasificacion, texto_sol, texto_ver)
         
         texto_historial = ""
         for paso, item in enumerate(solucionador.historial):
@@ -491,7 +724,7 @@ class Controlador:
                 texto_historial += f"--- Paso {paso + 1} ---\n{item}\n"
             texto_historial += "\n"
             
-        self.vista.actualizar_historial(texto_historial)
+        actualizar_historial(texto_historial)
 
     # ==========================================================
     # VECTORIALES Y MATRICIALES

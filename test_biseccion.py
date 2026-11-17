@@ -139,6 +139,8 @@ class PruebasBiseccion(unittest.TestCase):
             app = Controlador(root)
             vista = app.vista
             root.update()
+            vista._al_cambiar_modulo(0, "Gauss-Jordan")
+            root.update()
 
             tarjeta_matriz = vista.scroll_matriz.master.master
             tarjeta_resultados = vista.paneles_resultado_gauss.master.master
@@ -160,7 +162,7 @@ class PruebasBiseccion(unittest.TestCase):
                 root.after_cancel(callback)
             root.destroy()
 
-    def test_menu_de_metodos_vertical_a_la_izquierda(self):
+    def test_grupos_desplegables_y_portada_inicial(self):
         import tkinter as tk
 
         from controlador.controlador import Controlador
@@ -170,25 +172,70 @@ class PruebasBiseccion(unittest.TestCase):
         try:
             app = Controlador(root)
             vista = app.vista
-            root.update_idletasks()
+            root.update()
 
-            self.assertEqual(vista.nav_segmentada.orient, tk.VERTICAL)
-            self.assertEqual(len(vista.nav_segmentada.botones), len(vista.modulos))
+            self.assertEqual(
+                tuple(vista.grupos_navegacion),
+                ("Algebra Lineal", "Operaciones especiales", "Metodos Numericos"),
+            )
+            self.assertEqual(len(vista.botones_metodos), len(vista.modulos))
             self.assertTrue(all(
-                boton.pack_info()["fill"] == tk.X
-                for boton in vista.nav_segmentada.botones
+                not grupo["expandido"]
+                for grupo in vista.grupos_navegacion.values()
             ))
+            self.assertIsNone(vista._modulo_seleccionado)
+            self.assertTrue(vista._portada_activa)
+            self.assertEqual(vista._scrollbar_vertical.winfo_manager(), "")
+            bbox = vista._scroll_canvas.bbox(vista._ventana_scroll)
+            self.assertLessEqual(bbox[3] - bbox[1], vista._scroll_canvas.winfo_height())
+            self.assertLessEqual(
+                abs(
+                    (vista.portada.winfo_rootx() + vista.portada.winfo_width() / 2)
+                    - (vista.presentacion.winfo_rootx() + vista.presentacion.winfo_width() / 2)
+                ),
+                2,
+            )
+            self.assertLessEqual(
+                abs(
+                    (vista.portada.winfo_rooty() + vista.portada.winfo_height() / 2)
+                    - (vista.presentacion.winfo_rooty() + vista.presentacion.winfo_height() / 2)
+                ),
+                2,
+            )
+            self.assertEqual(
+                vista.nb_main.index("current"),
+                vista.nb_main.index(vista.presentacion),
+            )
+            self.assertEqual(vista.presentacion.winfo_manager(), "notebook")
+            self.assertEqual(vista.nb_main.winfo_manager(), "pack")
             self.assertLess(
-                vista.nav_segmentada.winfo_rootx(),
+                next(iter(vista.grupos_navegacion.values()))["boton"].winfo_rootx(),
                 vista.nb_main.winfo_rootx(),
             )
 
-            vista.nav_segmentada.seleccionar(len(vista.modulos) - 1)
+            grupo_numerico = vista.grupos_navegacion["Metodos Numericos"]
+            metodo_frame = vista.botones_metodos[len(vista.modulos) - 1].master
+            self.assertEqual(metodo_frame.cget("highlightthickness"), 1)
+            grupo_numerico["boton"].invoke()
+            root.update_idletasks()
+            self.assertTrue(grupo_numerico["expandido"])
+            self.assertEqual(grupo_numerico["contenido"].grid_info()["row"], 1)
+            vista.botones_metodos[len(vista.modulos) - 1].invoke()
             root.update()
             self.assertEqual(vista.nb_main.index("current"), len(vista.modulos) - 1)
-            vista.nb_main.select(0)
+            self.assertEqual(vista._modulo_seleccionado, len(vista.modulos) - 1)
+            self.assertFalse(vista._portada_activa)
+            self.assertEqual(vista._scrollbar_vertical.winfo_manager(), "grid")
+            self.assertEqual(vista.presentacion.winfo_manager(), "notebook")
+            self.assertEqual(vista.nb_main.winfo_manager(), "pack")
+
+            vista._mostrar_presentacion()
             root.update()
-            self.assertEqual(vista.nav_segmentada.seleccionado, 0)
+            self.assertIsNone(vista._modulo_seleccionado)
+            self.assertEqual(
+                vista.nb_main.index("current"),
+                vista.nb_main.index(vista.presentacion),
+            )
         finally:
             for callback in root.tk.call("after", "info"):
                 root.after_cancel(callback)
@@ -203,7 +250,9 @@ class PruebasBiseccion(unittest.TestCase):
         try:
             app = Controlador(root)
             vista = app.vista
-            vista.nb_main.select(vista.tab_biseccion)
+            vista._al_cambiar_modulo(
+                vista.nb_main.index(vista.tab_biseccion), "Método de Bisección",
+            )
             root.update_idletasks()
 
             for campo, valor in (
