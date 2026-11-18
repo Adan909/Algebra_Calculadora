@@ -200,7 +200,7 @@ class VentanaPrincipal:
         left_box.pack(side=tk.LEFT, fill=tk.Y, padx=(18, 10))
 
         lbl_logo = tk.Label(
-            left_box, text="⚡ ALGEBRA ENGINE",
+            left_box, text="⚡ ALGEBRA COMPUTATION ENGINE",
             font=FONT_TITLE, bg=BG_CARD, fg=TEXT_PRIMARY
         )
         lbl_logo.pack(side=tk.LEFT, pady=12)
@@ -312,6 +312,8 @@ class VentanaPrincipal:
             font=FONT_SMALL_BOLD, bg=BG_CARD, fg=TEXT_PRIMARY,
         ).pack(anchor="w", padx=12, pady=(12, 8))
 
+        fuente_teclas_numericas = tema.get_font_ui(13, "bold")
+        fuente_teclas_funciones = tema.get_font_ui(11, "bold")
         teclas_numericas = (
             (("7", "7"), ("8", "8"), ("9", "9"), ("÷", "/")),
             (("4", "4"), ("5", "5"), ("6", "6"), ("×", "*")),
@@ -331,12 +333,12 @@ class VentanaPrincipal:
                 )
                 boton = tk.Button(
                     cuadricula_numerica, text=etiqueta, command=comando,
-                    font=FONT_BODY_BOLD, bg=BG_SECONDARY, fg=TEXT_PRIMARY,
+                    font=fuente_teclas_numericas, bg=BG_SECONDARY, fg=TEXT_PRIMARY,
                     activebackground=ACCENT_SOFT, activeforeground=ACCENT_PRIMARY,
                     relief="flat", bd=0, cursor="hand2", takefocus=0,
                     highlightthickness=1, highlightbackground=BORDER_SUBTLE,
                 )
-                boton.grid(row=fila, column=columna, sticky="nsew", padx=3, pady=3)
+                boton.grid(row=fila, column=columna, sticky="nsew", padx=5, pady=5)
                 self._teclado_botones[etiqueta] = boton
                 cuadricula_numerica.grid_columnconfigure(columna, weight=1)
             cuadricula_numerica.grid_rowconfigure(fila, weight=1)
@@ -367,12 +369,12 @@ class VentanaPrincipal:
                 cuadricula_funciones, text=etiqueta,
                 command=lambda texto=insercion, offset=desplazamiento:
                     self._teclado_insertar(texto, offset),
-                font=FONT_SMALL_BOLD, bg=BG_SECONDARY, fg=TEXT_PRIMARY,
+                font=fuente_teclas_funciones, bg=BG_SECONDARY, fg=TEXT_PRIMARY,
                 activebackground=ACCENT_SOFT, activeforeground=ACCENT_PRIMARY,
                 relief="flat", bd=0, cursor="hand2", takefocus=0,
                 highlightthickness=1, highlightbackground=BORDER_SUBTLE,
             )
-            boton.grid(row=fila, column=columna, sticky="nsew", padx=3, pady=3)
+            boton.grid(row=fila, column=columna, sticky="nsew", padx=5, pady=5)
             self._teclado_botones[etiqueta] = boton
             cuadricula_funciones.grid_columnconfigure(columna, weight=1)
         for fila in range(4):
@@ -1093,7 +1095,7 @@ class VentanaPrincipal:
         sidebar.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 10))
         sidebar.pack_propagate(False)
         tk.Label(
-            sidebar, text="MÉTODOS", font=FONT_SMALL_BOLD,
+            sidebar, text="UAM", font=FONT_SMALL_BOLD,
             bg=BG_CARD, fg=TEXT_MUTED, anchor="w",
         ).pack(fill=tk.X, padx=12, pady=(14, 8))
         tk.Button(

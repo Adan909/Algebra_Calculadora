@@ -33,7 +33,7 @@ class TestFuncionesTeclado(unittest.TestCase):
 class TestTecladoCalculadora(unittest.TestCase):
     def test_inserta_funciones_en_campo_activo_y_borra_caracter(self):
         root = tk.Tk()
-        root.geometry("1280x880")
+        root.geometry("1000x600")
         try:
             vista = Controlador(root).vista
             vista._al_cambiar_modulo(

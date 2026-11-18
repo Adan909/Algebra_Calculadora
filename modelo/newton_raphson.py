@@ -165,15 +165,35 @@ def _derivar(nodo):
             factor = _binario(
                 ast.Div, copy.deepcopy(nodo.args[0]), _llamada("abs", argumento)
             )
-        elif nombre == "sin":
+        elif nombre in {"sin", "sen"}:
             factor = _llamada("cos", argumento)
         elif nombre == "cos":
             factor = _negar(_llamada("sin", argumento))
-        elif nombre == "tan":
+        elif nombre in {"tan", "tg"}:
             factor = _binario(
                 ast.Div,
                 _constante(1),
                 _binario(ast.Pow, _llamada("cos", argumento), _constante(2)),
+            )
+        elif nombre == "csc":
+            factor = _negar(
+                _producto(
+                    _llamada("csc", argumento),
+                    _llamada("cot", copy.deepcopy(argumento)),
+                )
+            )
+        elif nombre == "sec":
+            factor = _producto(
+                _llamada("sec", argumento),
+                _llamada("tan", copy.deepcopy(argumento)),
+            )
+        elif nombre == "cot":
+            factor = _negar(
+                _binario(
+                    ast.Pow,
+                    _llamada("csc", argumento),
+                    _constante(2),
+                )
             )
         elif nombre == "exp":
             factor = _llamada("exp", argumento)
@@ -191,7 +211,7 @@ def _derivar(nodo):
                 _constante(1),
                 _producto(_constante(2), _llamada("sqrt", argumento)),
             )
-        elif nombre == "asin":
+        elif nombre in {"asin", "arcsin"}:
             factor = _binario(
                 ast.Div,
                 _constante(1),
@@ -204,7 +224,7 @@ def _derivar(nodo):
                     ),
                 ),
             )
-        elif nombre == "acos":
+        elif nombre in {"acos", "arccos"}:
             factor = _negar(
                 _binario(
                     ast.Div,
@@ -219,11 +239,45 @@ def _derivar(nodo):
                     ),
                 )
             )
-        elif nombre == "atan":
+        elif nombre in {"atan", "arctan", "acot", "arccot"}:
+            factor = _binario(
+                ast.Div,
+                _constante(-1 if nombre in {"acot", "arccot"} else 1),
+                _suma(_constante(1), _binario(ast.Pow, argumento, _constante(2))),
+            )
+        elif nombre in {"acsc", "arccsc"}:
+            factor = _negar(
+                _binario(
+                    ast.Div,
+                    _constante(1),
+                    _producto(
+                        _llamada("abs", argumento),
+                        _llamada(
+                            "sqrt",
+                            _binario(
+                                ast.Sub,
+                                _binario(ast.Pow, copy.deepcopy(argumento), _constante(2)),
+                                _constante(1),
+                            ),
+                        ),
+                    ),
+                )
+            )
+        elif nombre in {"asec", "arcsec"}:
             factor = _binario(
                 ast.Div,
                 _constante(1),
-                _suma(_constante(1), _binario(ast.Pow, argumento, _constante(2))),
+                _producto(
+                    _llamada("abs", argumento),
+                    _llamada(
+                        "sqrt",
+                        _binario(
+                            ast.Sub,
+                            _binario(ast.Pow, copy.deepcopy(argumento), _constante(2)),
+                            _constante(1),
+                        ),
+                    ),
+                ),
             )
         else:
             raise ValueError(
