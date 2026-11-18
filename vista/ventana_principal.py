@@ -74,6 +74,14 @@ class VentanaPrincipal:
         self._contenido_scroll.bind("<Configure>", self._actualizar_region_scroll)
         self._scroll_canvas.bind("<Configure>", self._ajustar_contenido_scroll)
         self.root.bind("<F11>", self._toggle_root_fullscreen)
+        self._teclado_ventana = None
+        self._teclado_objetivo = None
+        self._teclado_cursor = 0
+        self._teclado_seleccion = None
+        self.root.bind_all("<FocusIn>", self._registrar_destino_teclado, add="+")
+        self.root.bind_all("<FocusOut>", self._registrar_destino_teclado, add="+")
+        self.root.bind_all("<KeyRelease>", self._registrar_destino_teclado, add="+")
+        self.root.bind_all("<ButtonRelease-1>", self._registrar_destino_teclado, add="+")
 
         # Historial de estados de matriz para función deshacer
         self._historial_matrices = []
@@ -217,6 +225,11 @@ class VentanaPrincipal:
             right_box, es_oscuro=tema.es_oscuro(), comando=self.alternar_tema
         )
         self.sw_tema.pack(side=tk.RIGHT, pady=10, padx=(12, 0))
+        BotonSecundario(
+            right_box, text="⌨ Teclado",
+            command=self._alternar_teclado,
+            font=FONT_SMALL_BOLD,
+        ).pack(side=tk.RIGHT, pady=10, padx=(0, 8))
 
         self.lbl_clock = tk.Label(
             right_box, text="--:--:--",
@@ -226,6 +239,225 @@ class VentanaPrincipal:
         Tooltip(self.lbl_clock, "Hora local del sistema")
 
         tk.Frame(self._contenido_scroll, bg=BORDER_SUBTLE, height=1).pack(fill=tk.X, side=tk.TOP)
+
+    def _registrar_destino_teclado(self, event):
+        widget = event.widget
+        if not isinstance(widget, tk.Entry):
+            return
+        try:
+            if not widget.winfo_exists():
+                return
+            self._teclado_objetivo = widget
+            self._teclado_cursor = widget.index(tk.INSERT)
+            self._teclado_seleccion = (
+                (widget.index("sel.first"), widget.index("sel.last"))
+                if widget.selection_present()
+                else None
+            )
+        except tk.TclError:
+            self._teclado_seleccion = None
+
+    def _alternar_teclado(self):
+        if self._teclado_ventana is not None:
+            try:
+                if self._teclado_ventana.winfo_exists():
+                    self._teclado_ventana.destroy()
+            except tk.TclError:
+                pass
+            self._teclado_ventana = None
+            return
+        self._crear_teclado()
+
+    def _cerrar_teclado(self):
+        if self._teclado_ventana is not None:
+            try:
+                if self._teclado_ventana.winfo_exists():
+                    self._teclado_ventana.destroy()
+            except tk.TclError:
+                pass
+        self._teclado_ventana = None
+
+    def _crear_teclado(self):
+        ventana = tk.Toplevel(self.root)
+        self._teclado_ventana = ventana
+        ventana.title("Teclado de calculadora")
+        ventana.configure(bg=BG_WINDOW)
+        ventana.resizable(False, False)
+        ventana.geometry(
+            f"850x500+{self.root.winfo_rootx() + 40}+{self.root.winfo_rooty() + 90}"
+        )
+        ventana.protocol("WM_DELETE_WINDOW", self._cerrar_teclado)
+
+        contenido = tk.Frame(ventana, bg=BG_WINDOW, padx=12, pady=12)
+        contenido.pack(fill=tk.BOTH, expand=True)
+        paneles = tk.Frame(contenido, bg=BG_WINDOW)
+        paneles.pack(fill=tk.BOTH, expand=True)
+        seccion_numerica = tk.Frame(
+            paneles, bg=BG_CARD,
+            highlightthickness=1, highlightbackground=BORDER_SUBTLE,
+        )
+        seccion_numerica.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 6))
+        seccion_funciones = tk.Frame(
+            paneles, bg=BG_CARD,
+            highlightthickness=1, highlightbackground=BORDER_SUBTLE,
+        )
+        seccion_funciones.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(6, 0))
+
+        tk.Label(
+            seccion_numerica, text="NÚMEROS Y OPERACIONES",
+            font=FONT_SMALL_BOLD, bg=BG_CARD, fg=TEXT_PRIMARY,
+        ).pack(anchor="w", padx=12, pady=(12, 8))
+        tk.Label(
+            seccion_funciones, text="FUNCIONES MATEMÁTICAS",
+            font=FONT_SMALL_BOLD, bg=BG_CARD, fg=TEXT_PRIMARY,
+        ).pack(anchor="w", padx=12, pady=(12, 8))
+
+        teclas_numericas = (
+            (("7", "7"), ("8", "8"), ("9", "9"), ("÷", "/")),
+            (("4", "4"), ("5", "5"), ("6", "6"), ("×", "*")),
+            (("1", "1"), ("2", "2"), ("3", "3"), ("−", "-")),
+            (("(", "("), ("0", "0"), (")", ")"), ("+", "+")),
+            (("x", "x"), (".", "."), ("xʸ", "^"), ("⌫", None)),
+        )
+        self._teclado_botones = {}
+        cuadricula_numerica = tk.Frame(seccion_numerica, bg=BG_CARD)
+        cuadricula_numerica.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 10))
+        for fila, teclas in enumerate(teclas_numericas):
+            for columna, (etiqueta, valor) in enumerate(teclas):
+                comando = (
+                    self._teclado_borrar
+                    if valor is None
+                    else lambda insercion=valor: self._teclado_insertar(insercion)
+                )
+                boton = tk.Button(
+                    cuadricula_numerica, text=etiqueta, command=comando,
+                    font=FONT_BODY_BOLD, bg=BG_SECONDARY, fg=TEXT_PRIMARY,
+                    activebackground=ACCENT_SOFT, activeforeground=ACCENT_PRIMARY,
+                    relief="flat", bd=0, cursor="hand2", takefocus=0,
+                    highlightthickness=1, highlightbackground=BORDER_SUBTLE,
+                )
+                boton.grid(row=fila, column=columna, sticky="nsew", padx=3, pady=3)
+                self._teclado_botones[etiqueta] = boton
+                cuadricula_numerica.grid_columnconfigure(columna, weight=1)
+            cuadricula_numerica.grid_rowconfigure(fila, weight=1)
+
+        teclas_funciones = (
+            ("√", "sqrt()", 1),
+            ("log", "log()", 1),
+            ("ln", "ln()", 1),
+            ("e", "e", 0),
+            ("sin", "sin()", 1),
+            ("cos", "cos()", 1),
+            ("tan", "tan()", 1),
+            ("csc", "csc()", 1),
+            ("sec", "sec()", 1),
+            ("cot", "cot()", 1),
+            ("arcsin", "arcsin()", 1),
+            ("arccos", "arccos()", 1),
+            ("arctan", "arctan()", 1),
+            ("arccsc", "arccsc()", 1),
+            ("arcsec", "arcsec()", 1),
+            ("arccot", "arccot()", 1),
+        )
+        cuadricula_funciones = tk.Frame(seccion_funciones, bg=BG_CARD)
+        cuadricula_funciones.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 4))
+        for indice, (etiqueta, insercion, desplazamiento) in enumerate(teclas_funciones):
+            fila, columna = divmod(indice, 4)
+            boton = tk.Button(
+                cuadricula_funciones, text=etiqueta,
+                command=lambda texto=insercion, offset=desplazamiento:
+                    self._teclado_insertar(texto, offset),
+                font=FONT_SMALL_BOLD, bg=BG_SECONDARY, fg=TEXT_PRIMARY,
+                activebackground=ACCENT_SOFT, activeforeground=ACCENT_PRIMARY,
+                relief="flat", bd=0, cursor="hand2", takefocus=0,
+                highlightthickness=1, highlightbackground=BORDER_SUBTLE,
+            )
+            boton.grid(row=fila, column=columna, sticky="nsew", padx=3, pady=3)
+            self._teclado_botones[etiqueta] = boton
+            cuadricula_funciones.grid_columnconfigure(columna, weight=1)
+        for fila in range(4):
+            cuadricula_funciones.grid_rowconfigure(fila, weight=1)
+        tk.Label(
+            seccion_funciones, text="Las funciones trigonométricas usan radianes.",
+            font=FONT_MICRO, bg=BG_CARD, fg=TEXT_MUTED,
+        ).pack(anchor="w", padx=12, pady=(0, 10))
+
+        self._teclado_estado = tk.Label(
+            contenido, text="Selecciona un campo de entrada para comenzar.",
+            font=FONT_MICRO, bg=BG_WINDOW, fg=TEXT_MUTED, anchor="w",
+        )
+        self._teclado_estado.pack(fill=tk.X, pady=(8, 0))
+
+    def _teclado_indicar(self, mensaje, color=TEXT_MUTED):
+        etiqueta = getattr(self, "_teclado_estado", None)
+        if etiqueta is not None and etiqueta.winfo_exists():
+            etiqueta.config(text=mensaje, fg=color)
+
+    def _teclado_obtener_destino(self):
+        destino = self._teclado_objetivo
+        try:
+            if destino is None or not destino.winfo_exists():
+                self._teclado_objetivo = None
+                self._teclado_seleccion = None
+                self._teclado_indicar("Selecciona un campo de entrada para comenzar.", WARNING_TEXT)
+                return None
+        except tk.TclError:
+            self._teclado_objetivo = None
+            self._teclado_seleccion = None
+            self._teclado_indicar("El campo de entrada ya no está disponible.", WARNING_TEXT)
+            return None
+        return destino
+
+    def _teclado_insertar(self, texto, cursor_antes_final=0):
+        destino = self._teclado_obtener_destino()
+        if destino is None:
+            return
+        try:
+            longitud = destino.index(tk.END)
+            seleccion = self._teclado_seleccion
+            if seleccion is None and destino.selection_present():
+                seleccion = (destino.index("sel.first"), destino.index("sel.last"))
+            if seleccion:
+                inicio = min(max(0, seleccion[0]), longitud)
+                fin = min(max(inicio, seleccion[1]), longitud)
+            else:
+                inicio = min(max(0, self._teclado_cursor), longitud)
+                fin = inicio
+            destino.delete(inicio, fin)
+            destino.insert(inicio, texto)
+            cursor = inicio + len(texto) - cursor_antes_final
+            destino.icursor(cursor)
+            self._teclado_cursor = cursor
+            self._teclado_seleccion = None
+            self._teclado_indicar("Expresión insertada.", SUCCESS_TEXT)
+        except tk.TclError:
+            self._teclado_indicar("No se pudo modificar el campo seleccionado.", ERROR_TEXT)
+
+    def _teclado_borrar(self):
+        destino = self._teclado_obtener_destino()
+        if destino is None:
+            return
+        try:
+            longitud = destino.index(tk.END)
+            seleccion = self._teclado_seleccion
+            if seleccion is None and destino.selection_present():
+                seleccion = (destino.index("sel.first"), destino.index("sel.last"))
+            if seleccion:
+                inicio = min(max(0, seleccion[0]), longitud)
+                fin = min(max(inicio, seleccion[1]), longitud)
+                destino.delete(inicio, fin)
+                cursor = inicio
+            else:
+                cursor = min(max(0, self._teclado_cursor), longitud)
+                if cursor:
+                    destino.delete(cursor - 1, cursor)
+                    cursor -= 1
+            destino.icursor(cursor)
+            self._teclado_cursor = cursor
+            self._teclado_seleccion = None
+            self._teclado_indicar("Elemento eliminado.", SUCCESS_TEXT)
+        except tk.TclError:
+            self._teclado_indicar("No se pudo modificar el campo seleccionado.", ERROR_TEXT)
 
     def _al_cambiar_modulo(self, index, nombre):
         if not hasattr(self, "nb_main") or not 0 <= index < len(self.modulos):
@@ -1562,7 +1794,7 @@ class VentanaPrincipal:
         ).pack(side=tk.LEFT, padx=6)
         tk.Label(
             actions,
-            text="Verifica convergencia y residuo en cada iteración",
+            text="Convergencia y residuo",
             font=FONT_MICRO, bg=BG_CARD, fg=TEXT_MUTED,
         ).pack(side=tk.RIGHT)
 
@@ -4942,7 +5174,7 @@ class VentanaPrincipal:
         ).pack(side=tk.LEFT, padx=6)
         tk.Label(
             actions,
-            text="Usa dos aproximaciones iniciales; no requiere cambio de signo",
+            text="Aproximaciones iniciales; no requiere cambio de signo",
             font=FONT_MICRO, bg=BG_CARD, fg=TEXT_MUTED,
         ).pack(side=tk.RIGHT)
 
